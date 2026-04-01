@@ -1,4 +1,6 @@
 vectorstore:
+  url: "https://qdrant.aizaku.ca"
+  api_key: "${QDRANT_API_KEY}"
   collection: "modernity-v1"
   vector_size: 1536  # OpenAI text-embedding-3-small = 1536 dimensions
 
@@ -13,6 +15,7 @@ corpus:
     - "Modernism"
     - "Postmodernism"
   max_articles: 500
+  depth: 1
 
 openai:
   api_key: "${OPENAI_API_KEY}"
