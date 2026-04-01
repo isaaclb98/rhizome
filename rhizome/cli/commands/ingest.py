@@ -19,20 +19,22 @@ from rhizome.vectorstore.collection import CollectionManager
 )
 @click.option(
     "--domain",
-    help="Wikipedia domain to ingest (overrides config)",
+    "domains",
+    multiple=True,
+    help="Wikipedia domain(s) to ingest. Can be specified multiple times (overrides config)",
 )
 @click.option(
     "--max-articles",
     type=int,
     help="Maximum articles to ingest (overrides config)",
 )
-def ingest(config: str, domain: str | None, max_articles: int | None):
+def ingest(config: str, domains: tuple[str, ...] | None, max_articles: int | None):
     """Ingest Wikipedia articles and store chunks in Qdrant.
 
     Reads configuration from config.yaml. Run this before `rhizome traverse`.
 
     Example:
-        rhizome ingest --domain Modernism --max-articles 500
+        rhizome ingest --domain Modernism --domain Postmodernism --max-articles 500
     """
     # Load config
     with open(config) as f:
@@ -42,7 +44,8 @@ def ingest(config: str, domain: str | None, max_articles: int | None):
     corpus_cfg = cfg.get("corpus", {})
     hf_cfg = cfg.get("huggingface", {})
 
-    domain = domain or corpus_cfg.get("domain", "Modernism")
+    domain_cfg = corpus_cfg.get("domain", "Modernism")
+    domain_list = list(domains) if domains else ([domain_cfg] if isinstance(domain_cfg, list) else [domain_cfg])
     max_articles = max_articles or corpus_cfg.get("max_articles", 500)
     collection_name = traversal_cfg.get("collection", "modernity-v1")
 
@@ -53,7 +56,7 @@ def ingest(config: str, domain: str | None, max_articles: int | None):
         env_var = api_token[2:-1]  # strip ${ and }
         api_token = os.environ.get(env_var)
 
-    click.echo(f"Starting ingestion: domain={domain}, max_articles={max_articles}")
+    click.echo(f"Starting ingestion: domains={domain_list}, max_articles={max_articles}")
 
     # Set up components
     embedder = HuggingFaceEmbedder(api_token=api_token)
@@ -72,7 +75,7 @@ def ingest(config: str, domain: str | None, max_articles: int | None):
 
     # Ingest articles
     ingester = WikipediaIngester(
-        domain=domain,
+        domains=domain_list,
         max_articles=max_articles,
         chunker=Chunker(),
     )

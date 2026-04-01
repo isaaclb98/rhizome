@@ -13,21 +13,19 @@ WIKIPEDIA_API = "https://en.wikipedia.org/w/api.php"
 class WikipediaIngester:
     """Fetches Wikipedia articles and yields chunks for embedding.
 
-    Discovery strategy: takes a domain name, uses Wikipedia search API
-    to find relevant articles, then fetches full article text.
-
-    For the prototype, pass a seed list of article titles to guarantee
-    reliable content. Falls back to search-based discovery if no seed list.
+    Discovery strategy: takes one or more domain names (Wikipedia categories or
+    search terms), queries each via the Wikipedia API, and deduplicates the
+    combined results. Falls back to a seed list of article titles if provided.
     """
 
     def __init__(
         self,
-        domain: str,
+        domains: str | list[str],
         max_articles: int = 500,
         seed_titles: list[str] | None = None,
         chunker: Chunker | None = None,
     ):
-        self.domain = domain
+        self.domains = [domains] if isinstance(domains, str) else domains
         self.max_articles = max_articles
         self.seed_titles = seed_titles or []
         self.chunker = chunker or Chunker()
@@ -54,27 +52,40 @@ class WikipediaIngester:
                 continue
 
     def _discover_articles(self) -> list[str]:
-        """Discover article titles for the domain.
+        """Discover article titles across all domains.
 
-        Uses seed list if provided, otherwise falls back to Wikipedia search API.
+        Uses seed list if provided, otherwise searches each domain via
+        Wikipedia search API and deduplicates the combined results.
         """
         if self.seed_titles:
             return self.seed_titles
 
-        # Search Wikipedia for articles matching the domain
-        search_url = WIKIPEDIA_API
-        params = {
-            "action": "query",
-            "list": "search",
-            "srsearch": self.domain,
-            "srlimit": self.max_articles,
-            "format": "json",
-        }
+        seen: set[str] = set()
+        unique_titles: list[str] = []
 
-        response = self._http_get(search_url, params)
-        data = response.json()
-        results = data.get("query", {}).get("search", [])
-        return [r["title"] for r in results]
+        for domain in self.domains:
+            params = {
+                "action": "query",
+                "list": "search",
+                "srsearch": domain,
+                "srlimit": self.max_articles,
+                "format": "json",
+            }
+
+            response = self._http_get(WIKIPEDIA_API, params)
+            data = response.json()
+            results = data.get("query", {}).get("search", [])
+
+            for r in results:
+                title = r["title"]
+                if title not in seen:
+                    seen.add(title)
+                    unique_titles.append(title)
+
+            if len(unique_titles) >= self.max_articles:
+                break
+
+        return unique_titles[: self.max_articles]
 
     def _fetch_article(self, title: str) -> list[Chunk]:
         """Fetch a single article's full text and chunk it."""
