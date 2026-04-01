@@ -90,13 +90,15 @@ def ingest(config: str, domains: tuple[str, ...] | None, max_articles: int | Non
     else:
         click.echo(f"Using existing collection: {collection_name}")
 
-    # Ingest articles
+    # Discover articles first (to get actual count for progress bar)
     ingester = WikipediaIngester(
         domains=domain_list,
         max_articles=max_articles,
         depth=depth,
         chunker=Chunker(),
     )
+    discovered_titles = ingester._discover_articles()
+    actual_article_count = min(len(discovered_titles), max_articles)
 
     total_chunks = 0
     total_articles = 0
@@ -105,19 +107,19 @@ def ingest(config: str, domains: tuple[str, ...] | None, max_articles: int | Non
     batch_vectors = []
 
     try:
-        current_article = ""
         with click.progressbar(
-            length=max_articles,
+            length=actual_article_count,
             label="Ingesting articles",
             show_eta=True,
             show_percent=True,
         ) as bar:
             for chunk in ingester.ingest():
-                # Track new articles
+                # Track new articles — delete any stale chunks from prior ingest
                 if chunk.article_title not in seen_titles:
                     total_articles += 1
                     seen_titles.add(chunk.article_title)
-                    current_article = chunk.article_title
+                    # Remove old chunks for this article to prevent orphans
+                    collection_mgr.delete_chunks_by_article(collection_name, chunk.article_title)
                     bar.update(1)  # advance one article
 
                 # Embed the chunk text
