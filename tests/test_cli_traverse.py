@@ -31,6 +31,10 @@ class TestTraverseCommand:
         mock_coll_mgr.collection_exists.return_value = False
         mock_coll_mgr_cls.return_value = mock_coll_mgr
 
+        mock_embedder = MagicMock()
+        mock_embedder.vector_size.return_value = 1536
+        mock_embedder_cls.return_value = mock_embedder
+
         runner = CliRunner()
         result = runner.invoke(traverse, ["modernism", "--config", str(cfg)])
 
@@ -54,6 +58,10 @@ class TestTraverseCommand:
         mock_coll_mgr = MagicMock()
         mock_coll_mgr.collection_exists.return_value = True
         mock_coll_mgr_cls.return_value = mock_coll_mgr
+
+        mock_embedder = MagicMock()
+        mock_embedder.vector_size.return_value = 1536
+        mock_embedder_cls.return_value = mock_embedder
 
         mock_engine = MagicMock()
         mock_engine.traverse.side_effect = TraversalError("Empty collection")
@@ -83,6 +91,10 @@ class TestTraverseCommand:
         mock_coll_mgr.collection_exists.return_value = True
         mock_coll_mgr_cls.return_value = mock_coll_mgr
 
+        mock_embedder = MagicMock()
+        mock_embedder.vector_size.return_value = 1536
+        mock_embedder_cls.return_value = mock_embedder
+
         mock_engine = MagicMock()
         mock_engine.traverse.return_value = []  # Empty path
         mock_engine_cls.return_value = mock_engine
@@ -111,6 +123,10 @@ class TestTraverseCommand:
         mock_coll_mgr = MagicMock()
         mock_coll_mgr.collection_exists.return_value = True
         mock_coll_mgr_cls.return_value = mock_coll_mgr
+
+        mock_embedder = MagicMock()
+        mock_embedder.vector_size.return_value = 1536
+        mock_embedder_cls.return_value = mock_embedder
 
         mock_step = MagicMock()
         mock_step.text = "Modernism is a movement."

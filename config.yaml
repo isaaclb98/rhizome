@@ -14,8 +14,9 @@ corpus:
   domains:
     - "Modernism"
     - "Postmodernism"
-  max_articles: 500
-  depth: 1
+    - "Critical theory"
+  max_articles: 20000
+  depth: 3
 
 openai:
   api_key: "${OPENAI_API_KEY}"

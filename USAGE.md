@@ -1,79 +1,95 @@
 # Wikipedia Rhizome — Usage Guide
 
-Rhizome traverses Wikipedia's vector space to pull content into writing. Think of it as semantic random-walk research: you give it a concept, it walks through semantically-related Wikipedia articles, and produces markdown with citations.
+Rhizome walks through Wikipedia's vector space and pulls content into writing. You give it a concept, it traverses semantically-related Wikipedia articles, and outputs markdown with citations.
 
-## Prerequisites
-
-- Python 3.11+
-- [Qdrant](https://qdrant.tech/documentation/quick-start/) running locally (or update `config.yaml` to point at a remote instance)
-- OpenAI API key
-
-## Installation
+## TL;DR
 
 ```bash
-# Clone and install
-cd wikipedia-modernity
-python3.14 -m pip install -e .
+# 1. Set your OpenAI key
+export OPENAI_API_KEY=sk-...
 
-# Or with uv
-uv pip install -e .
+# 2. Install
+pip install -e .
+
+# 3. Build the corpus (run once)
+rhizome ingest --domain Modernism --domain Postmodernism --max-articles 20000
+
+# 4. Traverse (run as many times as you want)
+rhizome traverse "the tension between modernism and postmodernism" -o draft.md
 ```
 
-## Configuration
+---
 
-Edit `config.yaml` in the project root. The key settings:
+## First-time setup
 
-```yaml
-openai:
-  api_key: "${OPENAI_API_KEY}"   # your OpenAI key, or set OPENAI_API_KEY env var
-  model: "text-embedding-3-small" # 1536-dim, ~$0.02/million tokens
+### 1. Get an OpenAI API key
 
-vectorstore:
-  collection: "modernity-v1"      # Qdrant collection name
-  vector_size: 1536              # must match embedding model dimensions
-
-corpus:
-  source: "wikipedia"
-  domains:                      # Wikipedia search terms to ingest
-    - "Modernism"
-    - "Postmodernism"
-  max_articles: 500             # articles per domain
-
-traversal:
-  depth: 8                      # steps to walk through the vector space
-  epsilon: 0.1                  # exploration probability (0.0 = greedy, 1.0 = random)
-  top_k: 5                      # candidates to consider at each step
-```
-
-Set your OpenAI key:
+Sign up at [platform.openai.com](https://platform.openai.com) if you don't have one. Rhizome uses the `text-embedding-3-small` model ($0.02/million tokens — cheap for a 500-article corpus).
 
 ```bash
 export OPENAI_API_KEY=sk-...
 ```
 
-## Ingest: Build the Corpus
+Add this to your shell profile (`~/.bashrc`, `~/.zshrc`, etc.) so it persists.
 
-First, ingest Wikipedia articles into Qdrant. This fetches articles via the Wikipedia API, chunks them into paragraphs, embeds them with OpenAI, and stores the vectors.
+### 2. Install
 
 ```bash
-# Ingest the default domains from config.yaml
-rhizome ingest
-
-# Override domains from the command line
-rhizome ingest --domain Modernism --domain Postmodernism
-
-# Limit how many articles
-rhizome ingest --max-articles 200
-
-# Custom config path
-rhizome ingest --config my-config.yaml
+pip install -e .
 ```
 
-Ingest is idempotent. Running it twice will create duplicate chunks (the Qdrant upsert is batched at 50 chunks at a time, ~10-20 seconds per batch depending on article length).
+Requires Python 3.11 or later.
 
-## Traverse: Generate Narrative
+### 3. Qdrant (already configured)
 
-Once you have a corpus, traverse it to produce a writing prompt or draft section.
+The `config.yaml` points at a remote Qdrant instance (`https://qdrant.aizaku.ca`). No Docker or local setup needed. If you want to run Qdrant locally instead:
+
+```bash
+docker run -p 6333:6333 -p 6334:6334 qdrant/qdrant
+```
+
+Then update `config.yaml`:
+
+```yaml
+vectorstore:
+  url: "http://localhost:6333"
+  api_key: null  # no key needed for local
+```
+
+---
+
+## Ingest: Build the corpus
+
+Ingest fetches Wikipedia articles, chunks them into paragraphs, embeds each chunk with OpenAI, and stores the vectors in Qdrant.
+
+```bash
+# Ingest specific domains
+rhizome ingest --domain Modernism --domain Postmodernism --max-articles 20000
+
+# Override settings from the command line
+rhizome ingest --domain Modernism --max-articles 200
+```
+
+This takes a few minutes for 500 articles (OpenAI rate limits are the bottleneck). Progress is printed to stdout.
+
+**How it works:**
+1. PetScan looks up all Wikipedia articles in the category tree under "Modernism" and "Postmodernism" (depth 1 = top-level category only). The domains are combined as a **union** — articles from either category are included, not just articles in both.
+2. Each article is looked up in the HuggingFace Wikipedia dataset snapshot
+3. Articles are chunked at paragraph boundaries (paragraphs over 500 chars are split at sentence boundaries)
+4. Bibliography and reference sections are stripped before chunking
+5. Each chunk is embedded with OpenAI `text-embedding-3-small` (1536 dimensions)
+6. Chunks are upserted to Qdrant in batches of 50
+
+**What to expect:**
+- 500 articles → ~2,500 chunks → ~2,500 OpenAI embedding calls
+- At ~10-20 seconds per 50-chunk batch, total ingest time is roughly 10-15 minutes
+- The article count in the output reflects unique Wikipedia articles processed
+
+---
+
+## Traverse: Walk the vector space
+
+Once you have a corpus, traverse it to generate research material.
 
 ```bash
 # Basic traversal — prints markdown to stdout
@@ -83,62 +99,100 @@ rhizome traverse "the tension between modernism and postmodernism"
 rhizome traverse "post-structuralist critique of meaning" -o output.md
 
 # Override traversal parameters
-rhizome traverse " Derrida and architecture" --depth 12 --epsilon 0.15 --top-k 7
+rhizome traverse "Derrida and architecture" --depth 12 --epsilon 0.15 --top-k 7
 ```
 
-The output is markdown with inline citations pointing back to Wikipedia articles and paragraphs. It is not a finished essay — it is research fodder with sources.
-
-### Output format
-
-Each paragraph is sourced:
-
-```markdown
-Postmodernism rejects the grand narratives of modernism, [1] treating
-style as a cultural construct rather than an aesthetic absolute. The
-emphasis shifts from permanence toplay, from the timeless to the
-contingent.
-
-[1] https://en.wikipedia.org/wiki/Postmodernism — "Postmodernism"
-```
+The output is not a finished essay. It is a sequence of Wikipedia paragraphs, ordered by semantic similarity to the traversal path, with citations.
 
 ### Tuning traversal
 
-| Flag | What it does |
-|------|-------------|
-| `--depth` | How many hops. Higher = longer/more tangential output, riskier |
-| `--epsilon` | Exploration vs exploitation. 0.0 = always pick the nearest neighbor; 0.1-0.2 = occasionally jump somewhere random to escape local basins |
-| `--top-k` | Candidate pool size at each step. Higher = more options but slower |
+| Flag | Default | What it does |
+|------|---------|-------------|
+| `--depth` | 8 | How many hops. Higher = longer/more tangential output |
+| `--epsilon` | 0.1 | Exploration probability. 0.0 = always pick the nearest neighbor; 0.2 = 20% random jumps |
+| `--top-k` | 5 | Candidate pool size. Higher = more options but slower per step |
 
-## How the traversal works
-
-The traversal is an epsilon-greedy random walk through the vector space:
-
+**How the traversal works:**
 1. Embed the starting concept with OpenAI
-2. Query Qdrant for the `top_k` nearest neighbors
-3. With probability `epsilon`, pick a random candidate instead of the best match
-4. If no unvisited neighbors remain, force a random global jump
-5. Repeat until `depth` is reached
+2. Query Qdrant for the `top_k` nearest chunks
+3. With probability `epsilon`, pick a random candidate (explore)
+4. With probability `1-epsilon`, pick the nearest (exploit)
+5. If the nearest neighbor is already visited, fall back to the next-nearest
+6. After 2 consecutive fallbacks (stuck in local basin), force a random global jump to escape
+7. Repeat until `depth` is reached
 
-The "narrative" is stitched from the actual Wikipedia paragraph text, with citations. The LLM (you, writing with this as research) decides what to keep and how to connect the threads.
+---
 
 ## Two-step workflow
 
 ```bash
-# 1. Build the corpus (run once)
-rhizome ingest --domain Modernism --domain Postmodernism --max-articles 500
+# Step 1: Build the corpus (once)
+rhizome ingest --domain Modernism --domain Postmodernism --max-articles 20000
 
-# 2. Traverse as many times as you want
+# Step 2: Traverse as many times as you want (each run is ~30 seconds)
 rhizome traverse "the death of the author and its implications"
 rhizome traverse "Bauhaus influence on graphic design"
 rhizome traverse "deconstruction as architectural theory"
+rhizome traverse " Deleuze and Guattari's rhizome concept"
 ```
+
+---
+
+## Output format
+
+Each paragraph is followed by its citation:
+
+```markdown
+Postmodernism rejects the grand narratives of modernism, treating
+style as a cultural construct rather than an aesthetic absolute.
+
+*[Source: Postmodernism](https://en.wikipedia.org/wiki/Postmodernism)*
+```
+
+The file footer shows the traversal path length and tool name.
+
+---
 
 ## Troubleshooting
 
-**"Collection not found"** — Run `rhizome ingest` first.
+**"OPENAI_API_KEY environment variable is not set"**
+Set the env var: `export OPENAI_API_KEY=sk-...`
 
-**"OPENAI_API_KEY environment variable is not set"** — Set the env var: `export OPENAI_API_KEY=sk-...`
+**"Collection not found"**
+Run `rhizome ingest` first to build the corpus.
 
-**Rate limiting from OpenAI** — Ingest is sequential and slow. For large corpora, you can parallelize the embedding step, but that requires changes to `ingest.py`.
+**"Connection refused" or Qdrant errors**
+Check that Qdrant is running. The remote instance at `https://qdrant.aizaku.ca` requires network access. For local: `docker run -p 6333:6333 qdrant/qdrant`.
 
-**Qdrant connection refused** — Make sure Qdrant is running. Default address is `localhost:6333`. Update `vectorstore:` in config.yaml to set `url: "http://localhost:6333"` or point at a remote instance.
+**Rate limiting from OpenAI**
+Ingest is sequential. For large corpora, embedding is the bottleneck. A 500-article ingest takes roughly 10-15 minutes.
+
+---
+
+## Configuration reference
+
+All settings live in `config.yaml`:
+
+```yaml
+openai:
+  api_key: "${OPENAI_API_KEY}"   # env var or literal key
+  model: "text-embedding-3-small" # 1536-dim embeddings
+
+vectorstore:
+  url: "https://qdrant.aizaku.ca" # remote Qdrant
+  api_key: "${QDRANT_API_KEY}"     # cloud Qdrant key
+  collection: "modernity-v1"       # collection name
+  vector_size: 1536                # must match embedding model
+
+corpus:
+  domains:
+    - "Modernism"       # Wikipedia categories to ingest
+    - "Postmodernism"
+  max_articles: 500      # per domain
+  depth: 1               # PetScan category tree depth (1 = top-level only)
+
+traversal:
+  depth: 8               # number of hops per traversal
+  epsilon: 0.1           # exploration probability
+  top_k: 5               # candidates per step
+```
