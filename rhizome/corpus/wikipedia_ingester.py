@@ -1,6 +1,7 @@
 """Wikipedia article ingestion via PetScan + HuggingFace dataset."""
 
 import sys
+import time
 import requests
 from typing import Iterator, Optional
 
@@ -8,6 +9,22 @@ from rhizome.corpus.chunker import Chunker, Chunk
 
 
 PETSCAN_URL = "https://petscan.wmflabs.org/"
+
+
+def _petscan_with_retry(url: str, params: dict, timeout: int = 60, max_retries: int = 5) -> requests.Response:
+    """Fetch PetScan with exponential backoff on transient errors."""
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(url, params=params, timeout=timeout)
+            if response.status_code in (429, 503):
+                raise requests.HTTPError(response=response)
+            return response
+        except requests.HTTPError as e:
+            if attempt == max_retries - 1:
+                raise
+            wait = (2 ** attempt) * 5
+            print(f"PetScan returned {e.response.status_code}, retrying in {wait}s...", file=sys.stderr)
+            time.sleep(wait)
 
 
 class WikipediaIngester:
@@ -84,7 +101,7 @@ class WikipediaIngester:
             "doit": 1,
         }
 
-        response = requests.get(PETSCAN_URL, params=params, timeout=60)
+        response = _petscan_with_retry(PETSCAN_URL, params=params)
         if response.status_code != 200:
             raise IngesterError(f"PetScan API error: {response.status_code} {response.text}")
 
@@ -95,8 +112,9 @@ class WikipediaIngester:
     def _fetch_article(self, title: str) -> Optional[str]:
         """Look up article text from the HuggingFace wikimedia/wikipedia dataset.
 
-        The dataset is materialized into a dict on first use so subsequent
-        lookups are O(1) rather than scanning the entire stream each time.
+        The dataset is loaded once and materialized into memory for O(1) lookups.
+        Wikipedia's 20231101.en snapshot is ~16GB. For large max_articles values
+        this may require significant RAM.
 
         Returns:
             The article text, or None if the title is not in the dataset snapshot.
@@ -110,6 +128,9 @@ class WikipediaIngester:
                 split="train",
                 streaming=True,
             )
+            # Materialize the full snapshot for O(1) lookups.
+            # For very large corpora (50k+ articles), consider a machine with
+            # more RAM or a sharded dataset approach.
             self._hf_stream = {example["title"]: example["text"] for example in ds}
 
         return self._hf_stream.get(title)
