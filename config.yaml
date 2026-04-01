@@ -1,6 +1,6 @@
 vectorstore:
   collection: "modernity-v1"
-  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+  vector_size: 1536  # OpenAI text-embedding-3-small = 1536 dimensions
 
 traversal:
   depth: 8
@@ -14,5 +14,6 @@ corpus:
     - "Postmodernism"
   max_articles: 500
 
-huggingface:
-  api_token: "${HF_API_TOKEN}"
+openai:
+  api_key: "${OPENAI_API_KEY}"
+  model: "text-embedding-3-small"
