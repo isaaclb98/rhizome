@@ -74,20 +74,22 @@ def traverse(
     # Resolve Qdrant URL and API key
     qdrant_url = vectorstore_cfg.get("url", "http://localhost:6333")
     qdrant_api_key = vectorstore_cfg.get("api_key")
-    if qdrant_api_key and qdrant_api_key.startswith("${"):
+    if qdrant_api_key is not None and qdrant_api_key.startswith("${"):
         env_var = qdrant_api_key[2:-1]
         qdrant_api_key = os.environ.get(env_var)
 
     # Resolve OpenAI API token
-    api_token = os.environ.get("OPENAI_API_KEY") or openai_cfg.get("api_key")
-    if api_token and api_token.startswith("${"):
+    api_token = os.environ.get("OPENAI_API_KEY")
+    if api_token is None:
+        api_token = openai_cfg.get("api_key")
+    if api_token is not None and api_token.startswith("${"):
         env_var = api_token[2:-1]
         api_token = os.environ.get(env_var)
 
     click.echo(f"Traversing: concept='{concept}', depth={depth}, epsilon={epsilon}")
 
     # Set up components
-    embedder = OpenAIEmbedder(api_token=api_token, model=openai_cfg.get("model", "text-embedding-3-small"))
+    embedder = OpenAIEmbedder(api_key=api_token, model=openai_cfg.get("model", "text-embedding-3-small"))
     vector_store = VectorStoreClient(url=qdrant_url, api_key=qdrant_api_key, collection_name=collection_name)
     collection_mgr = CollectionManager(url=qdrant_url, api_key=qdrant_api_key)
 

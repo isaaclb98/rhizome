@@ -1,5 +1,6 @@
 """Wikipedia article ingestion via PetScan + HuggingFace dataset."""
 
+import sys
 import requests
 from typing import Iterator, Optional
 
@@ -50,7 +51,7 @@ class WikipediaIngester:
             try:
                 article_text = self._fetch_article(title)
                 if article_text is None:
-                    print(f"Warning: '{title}' not found in HuggingFace dataset, skipping")
+                    print(f"Warning: '{title}' not found in HuggingFace dataset, skipping", file=sys.stderr)
                     continue
                 chunks = self.chunker.chunk_article(
                     article_title=title,
@@ -60,7 +61,7 @@ class WikipediaIngester:
                 for chunk in chunks:
                     yield chunk
             except IngesterError as e:
-                print(f"Warning: failed to fetch '{title}': {e}")
+                print(f"Warning: failed to fetch '{title}': {e}", file=sys.stderr)
                 continue
 
     def _discover_articles(self) -> list[str]:
@@ -94,8 +95,8 @@ class WikipediaIngester:
     def _fetch_article(self, title: str) -> Optional[str]:
         """Look up article text from the HuggingFace wikimedia/wikipedia dataset.
 
-        The dataset is streamed lazily on first use and cached for subsequent
-        lookups. Articles are identified by exact title match.
+        The dataset is materialized into a dict on first use so subsequent
+        lookups are O(1) rather than scanning the entire stream each time.
 
         Returns:
             The article text, or None if the title is not in the dataset snapshot.
@@ -103,18 +104,15 @@ class WikipediaIngester:
         if self._hf_stream is None:
             from datasets import load_dataset
 
-            self._hf_stream = load_dataset(
+            ds = load_dataset(
                 "wikimedia/wikipedia",
                 "20231101.en",
                 split="train",
                 streaming=True,
             )
+            self._hf_stream = {example["title"]: example["text"] for example in ds}
 
-        for example in self._hf_stream:
-            if example["title"] == title:
-                return example["text"]
-
-        return None
+        return self._hf_stream.get(title)
 
 
 class IngesterError(Exception):

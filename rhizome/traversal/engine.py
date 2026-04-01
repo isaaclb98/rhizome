@@ -59,6 +59,7 @@ class TraversalEngine:
         visited_ids: set[str] = set()
         path: list[TraversalStep] = []
         consecutive_fallback = 0
+        in_forced_jump = False
 
         for depth in range(self.config.depth):
             # Search excluding visited chunks
@@ -72,20 +73,34 @@ class TraversalEngine:
                 # No more unvisited chunks — stop early
                 break
 
-            # Epsilon-greedy selection
-            selected = self._epsilon_greedy_select(
-                candidates=candidates,
-                epsilon=self.config.epsilon,
-            )
+            selected: dict
 
-            # Check if this was a fallback (forced exploration after 2+ consecutive falls)
-            is_fallback = consecutive_fallback >= 2
-
-            # Update fallback counter
-            if self._was_random_selection(selected, candidates):
-                consecutive_fallback += 1
-            else:
+            # Forced global jump: 2+ consecutive fallbacks means we're stuck
+            if in_forced_jump or consecutive_fallback >= 2:
+                # Do a forced global jump — broad search then random pick
+                broad = self.vector_store.search(
+                    query_vector=query_vector,
+                    top_k=50,
+                )
+                remaining = [c for c in broad if c["id"] not in visited_ids]
+                if remaining:
+                    selected = random.choice(remaining)
+                else:
+                    break  # No unvisited chunks at all
+                in_forced_jump = True
                 consecutive_fallback = 0
+            else:
+                # Normal epsilon-greedy selection
+                selected, explore_fired = self._epsilon_greedy_select(
+                    candidates=candidates,
+                    epsilon=self.config.epsilon,
+                )
+                # Track fallback: we fell back when the best candidate was already visited
+                # (epsilon exploration is tracked separately)
+                if not explore_fired and selected["id"] != candidates[0]["id"]:
+                    consecutive_fallback += 1
+                else:
+                    consecutive_fallback = 0
 
             # Build the step
             payload = selected["payload"]
@@ -99,6 +114,9 @@ class TraversalEngine:
             path.append(step)
             visited_ids.add(payload["id"])
 
+            # After a forced jump, next step is normal traversal
+            in_forced_jump = False
+
             # Use the selected chunk's vector as the next query
             # In a full implementation, we would store vectors alongside payloads
             # For now, we re-embed the selected text as a proxy
@@ -110,7 +128,7 @@ class TraversalEngine:
         self,
         candidates: list[dict],
         epsilon: float,
-    ) -> dict:
+    ) -> tuple[dict, bool]:
         """Select a candidate using epsilon-greedy strategy.
 
         Args:
@@ -118,26 +136,18 @@ class TraversalEngine:
             epsilon: Probability of random exploration.
 
         Returns:
-            The selected candidate dict.
+            A tuple of (selected candidate dict, explore_fired bool).
+            explore_fired is True when epsilon triggered random exploration.
         """
         if not candidates:
             raise TraversalError("No candidates to select from")
 
         if random.random() < epsilon:
             # Explore: pick a random candidate
-            return random.choice(candidates)
+            return random.choice(candidates), True
         else:
             # Exploit: pick the nearest (first in sorted list)
-            return candidates[0]
-
-    def _was_random_selection(self, selected: dict, candidates: list[dict]) -> bool:
-        """Check if the selected candidate was a random (explore) choice.
-
-        This is approximate — if selected is not the first candidate,
-        it could be either random or a fallback. We treat any non-first
-        selection as potentially random for fallback tracking purposes.
-        """
-        return selected["id"] != candidates[0]["id"]
+            return candidates[0], False
 
 
 class TraversalError(Exception):
