@@ -9,6 +9,8 @@ from rhizome.corpus.chunker import Chunker
 from rhizome.embedder.openai import OpenAIEmbedder
 from rhizome.vectorstore.collection import CollectionManager
 
+BATCH_SIZE = 50
+
 
 @click.command()
 @click.option(
@@ -103,30 +105,37 @@ def ingest(config: str, domains: tuple[str, ...] | None, max_articles: int | Non
     batch_vectors = []
 
     try:
-        for chunk in ingester.ingest():
-            # Track new articles
-            if chunk.article_title not in seen_titles:
-                total_articles += 1
-                seen_titles.add(chunk.article_title)
+        current_article = ""
+        with click.progressbar(
+            length=max_articles,
+            label="Ingesting articles",
+            show_eta=True,
+            show_percent=True,
+        ) as bar:
+            for chunk in ingester.ingest():
+                # Track new articles
+                if chunk.article_title not in seen_titles:
+                    total_articles += 1
+                    seen_titles.add(chunk.article_title)
+                    current_article = chunk.article_title
+                    bar.update(1)  # advance one article
 
-            # Embed the chunk text
-            embedding = embedder.embed([chunk.text])[0]
-            batch_chunks.append(chunk)
-            batch_vectors.append(embedding)
+                # Embed the chunk text
+                embedding = embedder.embed([chunk.text])[0]
+                batch_chunks.append(chunk)
+                batch_vectors.append(embedding)
 
-            # Upsert in batches to avoid overwhelming Qdrant
-            if len(batch_chunks) >= 50:
+                # Upsert in batches to avoid overwhelming Qdrant
+                if len(batch_chunks) >= BATCH_SIZE:
+                    collection_mgr.upsert_chunks(collection_name, batch_chunks, batch_vectors)
+                    total_chunks += len(batch_chunks)
+                    batch_chunks = []
+                    batch_vectors = []
+
+            # Final batch
+            if batch_chunks:
                 collection_mgr.upsert_chunks(collection_name, batch_chunks, batch_vectors)
                 total_chunks += len(batch_chunks)
-                click.echo(f"  Upserted {len(batch_chunks)} chunks (total: {total_chunks})")
-                batch_chunks = []
-                batch_vectors = []
-
-        # Final batch
-        if batch_chunks:
-            collection_mgr.upsert_chunks(collection_name, batch_chunks, batch_vectors)
-            total_chunks += len(batch_chunks)
-            click.echo(f"  Upserted {len(batch_chunks)} chunks (total: {total_chunks})")
 
     except IngesterError as e:
         click.echo(f"Error during ingestion: {e}", err=True)
