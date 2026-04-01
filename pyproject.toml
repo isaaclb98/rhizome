@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "rhizome"
+version = "0.1.0"
+description = "Rhizomatic traversal of Wikipedia embeddings for writing aid"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "qdrant-client>=1.7.0",
+    "requests>=2.31.0",
+    "pyyaml>=6.0",
+    "click>=8.1.0",
+    "datasets>=2.14.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.1.0",
+]
+
+[project.scripts]
+rhizome = "rhizome.cli.main:main"
+
+[hatch.build.targets.wheel]
+packages = ["rhizome"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v"
+
+[tool.coverage.run]
+source = ["rhizome"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
