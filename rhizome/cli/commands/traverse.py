@@ -93,6 +93,18 @@ def traverse(
     vector_store = VectorStoreClient(url=qdrant_url, api_key=qdrant_api_key, collection_name=collection_name)
     collection_mgr = CollectionManager(url=qdrant_url, api_key=qdrant_api_key)
 
+    # Validate embedder vector size matches collection
+    expected_size = vectorstore_cfg.get("vector_size", 1536)
+    actual_size = embedder.vector_size()
+    if actual_size != expected_size:
+        click.echo(
+            f"Vector dimension mismatch: embedder produces {actual_size}-dim vectors "
+            f"but collection '{collection_name}' expects {expected_size}-dim. "
+            f"Check your embedding model and vector_size in config.yaml.",
+            err=True,
+        )
+        raise click.Abort()
+
     # Check collection exists
     if not collection_mgr.collection_exists(collection_name):
         click.echo(
