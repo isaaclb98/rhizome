@@ -1,0 +1,16 @@
+vectorstore:
+  collection: "modernity-v1"
+  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+
+traversal:
+  depth: 8
+  epsilon: 0.1
+  top_k: 5
+
+corpus:
+  source: "wikipedia"
+  domain: "Modernism"
+  max_articles: 500
+
+huggingface:
+  api_token: "${HF_API_TOKEN}"
