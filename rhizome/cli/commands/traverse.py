@@ -4,7 +4,7 @@ import os
 import yaml
 import click
 
-from rhizome.embedder.huggingface import HuggingFaceEmbedder, EmbeddingError
+from rhizome.embedder.openai import OpenAIEmbedder, EmbeddingError
 from rhizome.vectorstore.client import VectorStoreClient
 from rhizome.vectorstore.collection import CollectionManager
 from rhizome.traversal.engine import TraversalEngine, TraversalError as TraversalErr
@@ -64,7 +64,7 @@ def traverse(
 
     traversal_cfg = cfg.get("traversal", {})
     vectorstore_cfg = cfg.get("vectorstore", {})
-    hf_cfg = cfg.get("huggingface", {})
+    openai_cfg = cfg.get("openai", {})
 
     depth = depth if depth is not None else traversal_cfg.get("depth", 8)
     epsilon = epsilon if epsilon is not None else traversal_cfg.get("epsilon", 0.1)
@@ -72,7 +72,7 @@ def traverse(
     collection_name = vectorstore_cfg.get("collection", "modernity-v1")
 
     # Resolve API token
-    api_token = os.environ.get("HF_API_TOKEN") or hf_cfg.get("api_token")
+    api_token = os.environ.get("OPENAI_API_KEY") or openai_cfg.get("api_key")
     if api_token and api_token.startswith("${"):
         env_var = api_token[2:-1]
         api_token = os.environ.get(env_var)
@@ -80,7 +80,7 @@ def traverse(
     click.echo(f"Traversing: concept='{concept}', depth={depth}, epsilon={epsilon}")
 
     # Set up components
-    embedder = HuggingFaceEmbedder(api_token=api_token)
+    embedder = OpenAIEmbedder(api_token=api_token, model=openai_cfg.get("model", "text-embedding-3-small"))
     vector_store = VectorStoreClient(collection_name=collection_name)
     collection_mgr = CollectionManager()
 
