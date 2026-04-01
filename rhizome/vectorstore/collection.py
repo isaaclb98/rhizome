@@ -9,8 +9,8 @@ from rhizome.corpus.chunker import Chunk
 class CollectionManager:
     """Manages Qdrant collections for the rhizome vector store."""
 
-    def __init__(self, url: str = "http://localhost:6333"):
-        self.client = QdrantClient(url=url)
+    def __init__(self, url: str = "http://localhost:6333", api_key: str | None = None):
+        self.client = QdrantClient(url=url, api_key=api_key)
 
     def create_collection(
         self,

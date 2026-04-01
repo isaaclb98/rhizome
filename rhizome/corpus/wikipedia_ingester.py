@@ -1,21 +1,23 @@
-"""Wikipedia article ingestion via the Wikipedia API."""
+"""Wikipedia article ingestion via PetScan + HuggingFace dataset."""
 
 import requests
-import time
-from typing import Iterator
+from typing import Iterator, Optional
 
 from rhizome.corpus.chunker import Chunker, Chunk
 
 
-WIKIPEDIA_API = "https://en.wikipedia.org/w/api.php"
+PETSCAN_URL = "https://petscan.wmflabs.org/"
 
 
 class WikipediaIngester:
     """Fetches Wikipedia articles and yields chunks for embedding.
 
-    Discovery strategy: takes one or more domain names (Wikipedia categories or
-    search terms), queries each via the Wikipedia API, and deduplicates the
-    combined results. Falls back to a seed list of article titles if provided.
+    Discovery strategy: queries PetScan with category names to get the full
+    set of articles in those Wikipedia categories (including subcategory members
+    up to the configured depth). Article text is then looked up by title
+    from the HuggingFace wikimedia/wikipedia dataset snapshot.
+
+    Falls back to a seed list of article titles if provided.
     """
 
     def __init__(
@@ -24,11 +26,14 @@ class WikipediaIngester:
         max_articles: int = 500,
         seed_titles: list[str] | None = None,
         chunker: Chunker | None = None,
+        depth: int = 1,
     ):
         self.domains = [domains] if isinstance(domains, str) else domains
         self.max_articles = max_articles
         self.seed_titles = seed_titles or []
         self.chunker = chunker or Chunker()
+        self.depth = depth
+        self._hf_stream = None
 
     def ingest(self) -> Iterator[Chunk]:
         """Fetch articles and yield all chunks.
@@ -37,100 +42,79 @@ class WikipediaIngester:
             Chunk objects for each article paragraph.
 
         Raises:
-            IngesterError: If Wikipedia API returns an unexpected error or
-                          rate limiting exhausts retries.
+            IngesterError: If the HuggingFace dataset lookup fails or
+                          PetScan is unreachable.
         """
         titles = self._discover_articles()
-        for title in titles[:self.max_articles]:
+        for title in titles[: self.max_articles]:
             try:
-                chunks = self._fetch_article(title)
+                article_text = self._fetch_article(title)
+                if article_text is None:
+                    print(f"Warning: '{title}' not found in HuggingFace dataset, skipping")
+                    continue
+                chunks = self.chunker.chunk_article(
+                    article_title=title,
+                    article_url=f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}",
+                    article_text=article_text,
+                )
                 for chunk in chunks:
                     yield chunk
             except IngesterError as e:
-                # Log and continue — partial corpus is acceptable
                 print(f"Warning: failed to fetch '{title}': {e}")
                 continue
 
     def _discover_articles(self) -> list[str]:
-        """Discover article titles across all domains.
+        """Discover article titles via PetScan category membership.
 
-        Uses seed list if provided, otherwise searches each domain via
-        Wikipedia search API and deduplicates the combined results.
+        Uses seed list if provided, otherwise queries PetScan with the
+        configured domains and returns the union of all matching articles.
         """
         if self.seed_titles:
             return self.seed_titles
 
-        seen: set[str] = set()
-        unique_titles: list[str] = []
-
-        for domain in self.domains:
-            params = {
-                "action": "query",
-                "list": "search",
-                "srsearch": domain,
-                "srlimit": self.max_articles,
-                "format": "json",
-            }
-
-            response = self._http_get(WIKIPEDIA_API, params)
-            data = response.json()
-            results = data.get("query", {}).get("search", [])
-
-            for r in results:
-                title = r["title"]
-                if title not in seen:
-                    seen.add(title)
-                    unique_titles.append(title)
-
-            if len(unique_titles) >= self.max_articles:
-                break
-
-        return unique_titles[: self.max_articles]
-
-    def _fetch_article(self, title: str) -> list[Chunk]:
-        """Fetch a single article's full text and chunk it."""
+        categories_str = "\r\n".join(self.domains)
         params = {
-            "action": "query",
-            "titles": title,
-            "prop": "extracts",
-            "explaintext": True,
+            "language": "en",
+            "project": "wikipedia",
+            "depth": self.depth,
+            "categories": categories_str,
+            "combination": "union",
             "format": "json",
+            "doit": 1,
         }
 
-        response = self._http_get(WIKIPEDIA_API, params)
+        response = requests.get(PETSCAN_URL, params=params, timeout=60)
+        if response.status_code != 200:
+            raise IngesterError(f"PetScan API error: {response.status_code} {response.text}")
+
         data = response.json()
-        pages = data.get("query", {}).get("pages", {})
+        articles = data.get("*", [{}])[0].get("a", {}).get("*", [])
+        return list({article["title"].replace("_", " ") for article in articles})
 
-        for page_id, page_data in pages.items():
-            if page_id == "-1":  # Page not found
-                raise IngesterError(f"Article not found: {title}")
+    def _fetch_article(self, title: str) -> Optional[str]:
+        """Look up article text from the HuggingFace wikimedia/wikipedia dataset.
 
-            article_text = page_data.get("extract", "")
-            if not article_text:
-                raise IngesterError(f"No content for article: {title}")
+        The dataset is streamed lazily on first use and cached for subsequent
+        lookups. Articles are identified by exact title match.
 
-            return self.chunker.chunk_article(
-                article_title=title,
-                article_url=f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}",
-                article_text=article_text,
+        Returns:
+            The article text, or None if the title is not in the dataset snapshot.
+        """
+        if self._hf_stream is None:
+            from datasets import load_dataset
+
+            self._hf_stream = load_dataset(
+                "wikimedia/wikipedia",
+                "20231101.en",
+                split="train",
+                streaming=True,
             )
 
-        raise IngesterError(f"Unexpected response for article: {title}")
+        for example in self._hf_stream:
+            if example["title"] == title:
+                return example["text"]
 
-    def _http_get(self, url: str, params: dict, retries: int = 3) -> requests.Response:
-        """GET with exponential backoff for rate limiting."""
-        backoff = 1.0
-        for attempt in range(retries):
-            response = requests.get(url, params=params, timeout=30)
-            if response.status_code == 200:
-                return response
-            if response.status_code == 429:  # Rate limited
-                time.sleep(backoff)
-                backoff *= 2
-                continue
-            raise IngesterError(f"HTTP {response.status_code}: {response.text}")
-
-        raise IngesterError(f"Rate limited after {retries} retries")
+        return None
 
 
 class IngesterError(Exception):

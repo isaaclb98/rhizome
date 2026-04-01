@@ -68,3 +68,23 @@ class TestChunker:
         )
         assert len(chunks) == 2
         assert all(c.text.strip() for c in chunks)
+
+    def test_bibliography_truncation(self):
+        """Bibliography and reference sections are stripped before chunking."""
+        chunker = Chunker()
+        text = (
+            "Modernism is characterized by a break with traditional ways of writing. "
+            "It experiment with form and technique.\n\n"
+            "See also\nPostmodernism\nReferences\n"
+            "This reference section should be stripped."
+        )
+        chunks = chunker.chunk_article(
+            article_title="Modernism",
+            article_url="https://en.wikipedia.org/wiki/Modernism",
+            article_text=text,
+        )
+        # The text should be truncated before "See also"
+        full_text = " ".join(c.text for c in chunks)
+        assert "See also" not in full_text
+        assert "References" not in full_text
+        assert "Modernism is characterized" in full_text

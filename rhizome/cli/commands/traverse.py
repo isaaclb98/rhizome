@@ -71,7 +71,14 @@ def traverse(
     top_k = top_k if top_k is not None else traversal_cfg.get("top_k", 5)
     collection_name = vectorstore_cfg.get("collection", "modernity-v1")
 
-    # Resolve API token
+    # Resolve Qdrant URL and API key
+    qdrant_url = vectorstore_cfg.get("url", "http://localhost:6333")
+    qdrant_api_key = vectorstore_cfg.get("api_key")
+    if qdrant_api_key and qdrant_api_key.startswith("${"):
+        env_var = qdrant_api_key[2:-1]
+        qdrant_api_key = os.environ.get(env_var)
+
+    # Resolve OpenAI API token
     api_token = os.environ.get("OPENAI_API_KEY") or openai_cfg.get("api_key")
     if api_token and api_token.startswith("${"):
         env_var = api_token[2:-1]
@@ -81,8 +88,8 @@ def traverse(
 
     # Set up components
     embedder = OpenAIEmbedder(api_token=api_token, model=openai_cfg.get("model", "text-embedding-3-small"))
-    vector_store = VectorStoreClient(collection_name=collection_name)
-    collection_mgr = CollectionManager()
+    vector_store = VectorStoreClient(url=qdrant_url, api_key=qdrant_api_key, collection_name=collection_name)
+    collection_mgr = CollectionManager(url=qdrant_url, api_key=qdrant_api_key)
 
     # Check collection exists
     if not collection_mgr.collection_exists(collection_name):
