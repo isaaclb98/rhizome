@@ -15,11 +15,39 @@ class Chunk:
     article_url: str
 
 
+_STOP_HEADERS = [
+    "See also",
+    "References",
+    "Further reading",
+    "External links",
+    "Notes",
+    "Bibliography",
+    "Explanatory footnotes",
+    "General and cited references",
+]
+
+
+def _truncate_before_bibliography(text: str) -> str:
+    """Truncate text at the first bibliography section header.
+
+    Wikipedia articles contain References, See also, External links and other
+    sections after the main prose. These sections add noise to embeddings.
+    This function finds the earliest bibliography header and cuts there.
+    """
+    earliest = len(text)
+    for header in _STOP_HEADERS:
+        for variant in [f"\n{header}\n", f"\n{header} \n"]:
+            pos = text.find(variant)
+            if pos != -1 and pos < earliest:
+                earliest = pos
+    return text[:earliest]
+
+
 class Chunker:
     """Splits articles into chunks at paragraph boundaries.
 
     Paragraphs longer than max_chars are split at sentence boundaries.
-    Duplicate chunks (identical text across articles) are tracked and deduplicated.
+    Bibliography and reference sections are stripped before chunking.
     """
 
     def __init__(self, max_chars: int = 500):
@@ -37,6 +65,7 @@ class Chunker:
             List of Chunks.
         """
         slug = self._slugify(article_title)
+        article_text = _truncate_before_bibliography(article_text)
         paragraphs = self._split_paragraphs(article_text)
 
         chunks = []

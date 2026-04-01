@@ -48,13 +48,21 @@ def ingest(config: str, domains: tuple[str, ...] | None, max_articles: int | Non
     domain_cfg = corpus_cfg.get("domains", ["Modernism"])
     domain_list = list(domains) if domains else (domain_cfg if isinstance(domain_cfg, list) else [domain_cfg])
     max_articles = max_articles or corpus_cfg.get("max_articles", 500)
+    depth = corpus_cfg.get("depth", 1)
     collection_name = traversal_cfg.get("collection", "modernity-v1")
     vector_size = vectorstore_cfg.get("vector_size", 1536)
 
-    # Resolve API token
+    # Resolve Qdrant URL and API key
+    qdrant_url = vectorstore_cfg.get("url", "http://localhost:6333")
+    qdrant_api_key = vectorstore_cfg.get("api_key")
+    if qdrant_api_key and qdrant_api_key.startswith("${"):
+        env_var = qdrant_api_key[2:-1]
+        qdrant_api_key = os.environ.get(env_var)
+
+    # Resolve OpenAI API token
     api_token = os.environ.get("OPENAI_API_KEY") or openai_cfg.get("api_key")
     if api_token and api_token.startswith("${"):
-        env_var = api_token[2:-1]  # strip ${ and }
+        env_var = api_token[2:-1]
         api_token = os.environ.get(env_var)
 
     if not api_token:
@@ -65,7 +73,7 @@ def ingest(config: str, domains: tuple[str, ...] | None, max_articles: int | Non
 
     # Set up components
     embedder = OpenAIEmbedder(api_token=api_token, model=openai_cfg.get("model", "text-embedding-3-small"))
-    collection_mgr = CollectionManager()
+    collection_mgr = CollectionManager(url=qdrant_url, api_key=qdrant_api_key)
 
     # Ensure collection exists
     if not collection_mgr.collection_exists(collection_name):
@@ -82,6 +90,7 @@ def ingest(config: str, domains: tuple[str, ...] | None, max_articles: int | Non
     ingester = WikipediaIngester(
         domains=domain_list,
         max_articles=max_articles,
+        depth=depth,
         chunker=Chunker(),
     )
 
