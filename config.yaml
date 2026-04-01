@@ -9,7 +9,9 @@ traversal:
 
 corpus:
   source: "wikipedia"
-  domain: "Modernism"
+  domains:
+    - "Modernism"
+    - "Postmodernism"
   max_articles: 500
 
 huggingface:
