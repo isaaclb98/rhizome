@@ -26,11 +26,19 @@ rhizome traverse "the tension between modernism and postmodernism" -o draft.md
 
 Sign up at [platform.openai.com](https://platform.openai.com) if you don't have one. Rhizome uses the `text-embedding-3-small` model ($0.02/million tokens — cheap for a 500-article corpus).
 
+**Option A — `.env` file (recommended):**
 ```bash
-export OPENAI_API_KEY=sk-...
+cp .env.example .env
+# Then edit .env and add your keys
 ```
 
-Add this to your shell profile (`~/.bashrc`, `~/.zshrc`, etc.) so it persists.
+**Option B — environment variables:**
+```bash
+export OPENAI_API_KEY=sk-...
+export QDRANT_API_KEY=...  # only if using cloud Qdrant
+```
+
+Add env vars to your shell profile (`~/.bashrc`, `~/.zshrc`, etc.) to persist them.
 
 ### 2. Install
 

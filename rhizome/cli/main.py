@@ -1,5 +1,11 @@
 """Rhizome CLI entry point."""
 
+import os
+from dotenv import load_dotenv
+
+# Load .env file if it exists (API keys, Qdrant config, etc.)
+load_dotenv()
+
 import click
 
 from rhizome.cli.commands.ingest import ingest
