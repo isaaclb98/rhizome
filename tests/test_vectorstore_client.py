@@ -18,7 +18,10 @@ class TestVectorStoreClient:
         mock_hit.id = "modernism-001"
         mock_hit.score = 0.95
         mock_hit.payload = {"id": "modernism-001", "text": "Modernism is..."}
-        mock_client.search.return_value = [mock_hit]
+
+        mock_response = MagicMock()
+        mock_response.result = [mock_hit]
+        mock_client.http.search_api.search_points.return_value = mock_response
 
         client = VectorStoreClient(url="http://localhost:6333", collection_name="test-col")
         results = client.search(query_vector=[0.1] * 1536, top_k=5)
@@ -33,7 +36,9 @@ class TestVectorStoreClient:
         """search() returns empty list when no matches."""
         mock_client = MagicMock()
         mock_qdrant_cls.return_value = mock_client
-        mock_client.search.return_value = []
+        mock_response = MagicMock()
+        mock_response.result = []
+        mock_client.http.search_api.search_points.return_value = mock_response
 
         client = VectorStoreClient(url="http://localhost:6333", collection_name="test-col")
         results = client.search(query_vector=[0.1] * 1536, top_k=5)
@@ -61,7 +66,9 @@ class TestVectorStoreClient:
         hit3.score = 0.85
         hit3.payload = {"id": "postmodernism-001", "text": "Postmodernism is..."}
 
-        mock_client.search.return_value = [hit1, hit2, hit3]
+        mock_response = MagicMock()
+        mock_response.result = [hit1, hit2, hit3]
+        mock_client.http.search_api.search_points.return_value = mock_response
 
         client = VectorStoreClient(url="http://localhost:6333", collection_name="test-col")
         results = client.search_excluding(
@@ -86,7 +93,9 @@ class TestVectorStoreClient:
         hit1.score = 0.95
         hit1.payload = {"id": "chunk-a", "text": "Text A"}
 
-        mock_client.search.return_value = [hit1]
+        mock_response = MagicMock()
+        mock_response.result = [hit1]
+        mock_client.http.search_api.search_points.return_value = mock_response
 
         client = VectorStoreClient(url="http://localhost:6333", collection_name="test-col")
         results = client.search_excluding(
@@ -102,10 +111,12 @@ class TestVectorStoreClient:
         """search_excluding() fetches top_k * 3 to account for exclusions."""
         mock_client = MagicMock()
         mock_qdrant_cls.return_value = mock_client
-        mock_client.search.return_value = []
+        mock_response = MagicMock()
+        mock_response.result = []
+        mock_client.http.search_api.search_points.return_value = mock_response
 
         client = VectorStoreClient(url="http://localhost:6333", collection_name="test-col")
         client.search_excluding(query_vector=[0.1] * 1536, exclude_ids=[], top_k=5)
 
-        call_kwargs = mock_client.search.call_args[1]
-        assert call_kwargs["limit"] == 15  # top_k * 3
+        call_kwargs = mock_client.http.search_api.search_points.call_args[1]
+        assert call_kwargs["search_request"].limit == 15  # top_k * 3
