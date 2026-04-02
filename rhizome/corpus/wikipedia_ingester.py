@@ -1,5 +1,6 @@
 """Wikipedia article ingestion via PetScan + Wikipedia API."""
 
+import os
 import sys
 import time
 import requests
@@ -12,11 +13,17 @@ PETSCAN_URL = "https://petscan.wmflabs.org/"
 WIKIPEDIA_API = "https://en.wikipedia.org/w/api.php"
 
 
-def _petscan_with_retry(url: str, params: dict, timeout: int = 60, max_retries: int = 5) -> requests.Response:
-    """Fetch PetScan with exponential backoff on transient errors."""
+def _http_with_retry(
+    url: str,
+    params: dict,
+    headers: dict | None = None,
+    timeout: int = 30,
+    max_retries: int = 5,
+) -> requests.Response:
+    """Fetch a URL with exponential backoff on transient HTTP errors."""
     for attempt in range(max_retries):
         try:
-            response = requests.get(url, params=params, timeout=timeout)
+            response = requests.get(url, params=params, headers=headers, timeout=timeout)
             if response.status_code in (429, 503):
                 raise requests.HTTPError(response=response)
             return response
@@ -24,8 +31,18 @@ def _petscan_with_retry(url: str, params: dict, timeout: int = 60, max_retries: 
             if attempt == max_retries - 1:
                 raise
             wait = (2 ** attempt) * 5
-            print(f"PetScan returned {e.response.status_code}, retrying in {wait}s...", file=sys.stderr)
+            print(f"HTTP {e.response.status_code}, retrying in {wait}s...", file=sys.stderr)
             time.sleep(wait)
+        except (requests.ConnectionError, requests.Timeout) as e:
+            if attempt == max_retries - 1:
+                raise
+            wait = (2 ** attempt) * 5
+            print(f"Request failed ({type(e).__name__}), retrying in {wait}s...", file=sys.stderr)
+            time.sleep(wait)
+
+
+# Re-use the retry helper for PetScan
+_petscan_with_retry = lambda url, params, timeout=60, max_retries=5: _http_with_retry(url, params, None, timeout, max_retries)
 
 
 class WikipediaIngester:
@@ -101,7 +118,7 @@ class WikipediaIngester:
             "doit": 1,
         }
 
-        response = _petscan_with_retry(PETSCAN_URL, params=params)
+        response = _http_with_retry(PETSCAN_URL, params=params)
         if response.status_code != 200:
             raise IngesterError(f"PetScan API error: {response.status_code} {response.text}")
 
@@ -112,8 +129,8 @@ class WikipediaIngester:
     def _fetch_article(self, title: str) -> Optional[str]:
         """Fetch article text from the Wikipedia API.
 
-        Makes an HTTP request to the Wikipedia API for each article.
-        No dataset materialization — constant memory overhead.
+        Makes an HTTP request to the Wikipedia API for each article with retry
+        on transient errors. No dataset materialization — constant memory overhead.
 
         Returns:
             The article text, or None if the title does not exist.
@@ -125,10 +142,14 @@ class WikipediaIngester:
             "explaintext": True,
             "format": "json",
         }
-        headers = {
-            "User-Agent": "Rhizome/0.1.0 (Wikipedia Vector Corpus Builder; mailto:contact@example.com)"
-        }
-        response = requests.get(WIKIPEDIA_API, params=params, headers=headers, timeout=30)
+        # Wikipedia API requires a real contact method in User-Agent.
+        # Set WIKIPEDIA_USER_AGENT env var to your email, or keep the default.
+        user_agent = os.environ.get(
+            "WIKIPEDIA_USER_AGENT",
+            "Rhizome/0.1.0 (Wikipedia Vector Corpus Builder; mailto:your@email.com)",
+        )
+        headers = {"User-Agent": user_agent}
+        response = _http_with_retry(WIKIPEDIA_API, params=params, headers=headers)
         if response.status_code != 200:
             raise IngesterError(f"Wikipedia API error: {response.status_code}")
 
