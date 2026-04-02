@@ -9,7 +9,7 @@ Rhizome walks through Wikipedia's vector space and pulls content into writing. Y
 export OPENAI_API_KEY=sk-...
 
 # 2. Install
-pip install -e .
+uv pip install -e .
 
 # 3. Build the corpus (run once)
 rhizome ingest --domain Modernism --domain Postmodernism --max-articles 20000
@@ -26,19 +26,39 @@ rhizome traverse "the tension between modernism and postmodernism" -o draft.md
 
 Sign up at [platform.openai.com](https://platform.openai.com) if you don't have one. Rhizome uses the `text-embedding-3-small` model ($0.02/million tokens — cheap for a 500-article corpus).
 
+**Option A — `.env` file (recommended):**
 ```bash
-export OPENAI_API_KEY=sk-...
+cp .env.example .env
+# Then edit .env and add your keys
 ```
 
-Add this to your shell profile (`~/.bashrc`, `~/.zshrc`, etc.) so it persists.
+**Option B — environment variables:**
+```bash
+export OPENAI_API_KEY=sk-...
+export QDRANT_API_KEY=...  # only if using cloud Qdrant
+```
+
+Add env vars to your shell profile (`~/.bashrc`, `~/.zshrc`, etc.) to persist them.
 
 ### 2. Install
 
+Requires Python 3.11 or later.
+
+**With uv (recommended):**
 ```bash
-pip install -e .
+uv pip install -e .
 ```
 
-Requires Python 3.11 or later.
+**With pip (system Python — requires Ubuntu/Debian workaround):**
+```bash
+# If you get "externally-managed-environment", use --break-system-packages
+pip install -e . --break-system-packages
+```
+
+**Or with a virtual environment:**
+```bash
+python3.14 -m venv .venv && source .venv/bin/activate && pip install -e .
+```
 
 ### 3. Qdrant (already configured)
 

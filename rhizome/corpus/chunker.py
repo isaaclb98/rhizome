@@ -2,6 +2,7 @@
 
 import re
 import unicodedata
+import uuid
 from dataclasses import dataclass
 
 
@@ -9,7 +10,7 @@ from dataclasses import dataclass
 class Chunk:
     """A chunk of text from a Wikipedia article."""
 
-    id: str          # stable chunk ID (article-slug + ordinal)
+    id: str          # UUID used as Qdrant point ID
     text: str        # chunk text content
     article_title: str
     article_url: str
@@ -76,7 +77,7 @@ class Chunker:
 
             if len(para) <= self.max_chars:
                 chunks.append(Chunk(
-                    id=f"{slug}-{i:03d}",
+                    id=str(uuid.uuid4()),
                     text=para,
                     article_title=article_title,
                     article_url=article_url,
@@ -86,7 +87,7 @@ class Chunker:
                 for j, sub in enumerate(sub_chunks):
                     if sub.strip():
                         chunks.append(Chunk(
-                            id=f"{slug}-{i:03d}-{j:02d}",
+                            id=str(uuid.uuid4()),
                             text=sub.strip(),
                             article_title=article_title,
                             article_url=article_url,
