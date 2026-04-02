@@ -1,6 +1,6 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "rhizome"
@@ -25,8 +25,9 @@ dev = [
 [project.scripts]
 rhizome = "rhizome.cli.main:main"
 
-[hatch.build.targets.wheel]
-packages = ["rhizome"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["rhizome*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
