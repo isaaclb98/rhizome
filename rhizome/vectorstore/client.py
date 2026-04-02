@@ -1,7 +1,7 @@
 """Qdrant client wrapper for vector search operations."""
 
 from qdrant_client import QdrantClient
-from qdrant_client.models import SearchParams, Filter, FieldCondition, MatchValue
+from qdrant_client.models import Filter
 
 from rhizome.corpus.chunker import Chunk
 
@@ -29,13 +29,18 @@ class VectorStoreClient:
         Returns:
             List of dicts with 'id', 'score', 'payload' keys.
         """
-        results = self.client.search(
-            collection_name=self.collection_name,
-            query_vector=query_vector,
+        from qdrant_client.http import models
+
+        search_req = models.SearchRequest(
+            vector=query_vector,
             limit=top_k,
-            query_filter=query_filter,
+            filter=query_filter,
             with_payload=True,
-            with_vectors=False,
+            with_vector=False,
+        )
+        response = self.client.http.search_api.search_points(
+            collection_name=self.collection_name,
+            search_request=search_req,
         )
 
         return [
@@ -44,7 +49,7 @@ class VectorStoreClient:
                 "score": hit.score,
                 "payload": hit.payload,
             }
-            for hit in results
+            for hit in (response.result or [])
         ]
 
     def search_excluding(
@@ -64,16 +69,22 @@ class VectorStoreClient:
             List of dicts with 'id', 'score', 'payload' keys, excluding
             the specified IDs.
         """
-        # Search with a larger top_k to account for exclusions
-        results = self.client.search(
-            collection_name=self.collection_name,
-            query_vector=query_vector,
-            limit=top_k * 3,  # Over-fetch to account for exclusions
+        from qdrant_client.http import models
+
+        # Over-fetch to account for exclusions
+        search_req = models.SearchRequest(
+            vector=query_vector,
+            limit=top_k * 3,
             with_payload=True,
-            with_vectors=False,
+            with_vector=False,
+        )
+        response = self.client.http.search_api.search_points(
+            collection_name=self.collection_name,
+            search_request=search_req,
         )
 
-        filtered = [hit for hit in results if hit.payload.get("id") not in exclude_ids]
+        hits = response.result or []
+        filtered = [hit for hit in hits if (hit.payload or {}).get("id") not in exclude_ids]
         return [
             {
                 "id": hit.id,
