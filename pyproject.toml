@@ -13,7 +13,6 @@ dependencies = [
     "requests>=2.31.0",
     "pyyaml>=6.0",
     "click>=8.1.0",
-    "datasets>=2.14.0",
     "python-dotenv>=1.0.0",
 ]
 
