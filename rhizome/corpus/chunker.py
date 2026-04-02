@@ -34,10 +34,17 @@ def _truncate_before_bibliography(text: str) -> str:
     Wikipedia articles contain References, See also, External links and other
     sections after the main prose. These sections add noise to embeddings.
     This function finds the earliest bibliography header and cuts there.
+
+    Handles both plain text headers (e.g. "\nExternal links\n") and
+    Wikipedia markup headers (e.g. "\n== External links ==\n").
     """
     earliest = len(text)
     for header in _STOP_HEADERS:
-        for variant in [f"\n{header}\n", f"\n{header} \n"]:
+        # Plain text with trailing newline (paragraph separator after header)
+        plain = f"\n{header}\n"
+        # Wikipedia markup: == Header == (with optional trailing spaces inside markup)
+        markup = f"\n== {header} =="
+        for variant in [plain, markup]:
             pos = text.find(variant)
             if pos != -1 and pos < earliest:
                 earliest = pos
