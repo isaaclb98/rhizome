@@ -54,12 +54,16 @@ def ingest(config: str, domains: tuple[str, ...] | None, max_articles: int | Non
     collection_name = vectorstore_cfg.get("collection", "modernity-v1")
     vector_size = vectorstore_cfg.get("vector_size", 1536)
 
-    # Resolve Qdrant URL and API key
-    qdrant_url = vectorstore_cfg.get("url", "http://localhost:6333")
-    qdrant_api_key = vectorstore_cfg.get("api_key")
-    if qdrant_api_key is not None and qdrant_api_key.startswith("${"):
-        env_var = qdrant_api_key[2:-1]
-        qdrant_api_key = os.environ.get(env_var)
+    # Resolve Qdrant URL and API key (env vars override config)
+    qdrant_url = os.environ.get("QDRANT_URL") or vectorstore_cfg.get("url", "http://localhost:6333")
+    qdrant_api_key = os.environ.get("QDRANT_API_KEY")
+    if qdrant_api_key is None:
+        configured_key = vectorstore_cfg.get("api_key")
+        if configured_key is not None and configured_key.startswith("${"):
+            env_var = configured_key[2:-1]
+            qdrant_api_key = os.environ.get(env_var)
+        else:
+            qdrant_api_key = configured_key
 
     # Resolve OpenAI API token
     api_token = os.environ.get("OPENAI_API_KEY")
