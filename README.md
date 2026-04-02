@@ -83,7 +83,7 @@ vectorstore:
 Rhizome is available as a pre-built image on Docker Hub:
 
 ```bash
-# Start rhizome + Qdrant with one command
+# Start rhizome + local Qdrant with one command
 docker compose up -d
 
 # Run ingest inside the container
@@ -99,7 +99,15 @@ For local development with hot-rebuild:
 docker compose -f docker-compose.dev.yml up --build
 ```
 
-**Environment variables:** Copy `.env.example` to `.env` and add your `OPENAI_API_KEY`. The compose file reads from `.env` automatically.
+**Using a hosted Qdrant (e.g. Qdrant Cloud):** Set `QDRANT_URL` in your `.env` to your hosted URL. The local Qdrant container will start but won't be used:
+
+```env
+OPENAI_API_KEY=sk-...
+QDRANT_URL=https://your-qdrant-cloud.example.com:6333
+QDRANT_API_KEY=your-qdrant-key
+```
+
+**Environment variables:** Copy `.env.example` to `.env` and add your keys. The compose file reads from `.env` automatically.
 
 ---
 
