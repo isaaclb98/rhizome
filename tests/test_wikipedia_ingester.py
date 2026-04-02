@@ -59,52 +59,88 @@ class TestWikipediaIngester:
             ingester._discover_articles()
         assert "500" in str(exc_info.value)
 
-    def test_fetch_article_materializes_stream(self):
-        """_fetch_article caches the HF stream as a dict on first call."""
-        mock_ds = MagicMock()
-        mock_ds.__iter__ = lambda self: iter(
-            [{"title": "Modernism", "text": "Modernism is..."}, {"title": "Postmodernism", "text": "Postmodernism is..."}]
-        )
+    @patch("rhizome.corpus.wikipedia_ingester.requests.get")
+    def test_fetch_article_success(self, mock_get):
+        """_fetch_article returns extract from Wikipedia API."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "query": {
+                "pages": {
+                    "12345": {
+                        "pageid": 12345,
+                        "title": "Modernism",
+                        "extract": "Modernism is a philosophical movement."
+                    }
+                }
+            }
+        }
+        mock_get.return_value = mock_response
 
-        with patch("datasets.load_dataset") as mock_load:
-            mock_load.return_value = mock_ds
-            ingester = WikipediaIngester(domains=["Modernism"], seed_titles=["Modernism", "Postmodernism"])
+        ingester = WikipediaIngester(domains=["Modernism"], seed_titles=["Modernism"])
+        result = ingester._fetch_article("Modernism")
 
-            # First call — stream should be materialized
-            result1 = ingester._fetch_article("Modernism")
-            assert result1 == "Modernism is..."
+        assert result == "Modernism is a philosophical movement."
+        # Verify correct params were passed
+        mock_get.assert_called_once()
+        call_kwargs = mock_get.call_args
+        assert call_kwargs.kwargs["params"]["action"] == "query"
+        assert call_kwargs.kwargs["params"]["prop"] == "extracts"
 
-            # Verify load_dataset was called once
-            mock_load.assert_called_once()
-            # Verify stream was converted to dict
-            assert isinstance(ingester._hf_stream, dict)
+    @patch("rhizome.corpus.wikipedia_ingester.requests.get")
+    def test_fetch_article_not_found(self, mock_get):
+        """_fetch_article returns None for missing articles (no extract in response)."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        # Wikipedia returns a page entry with missing 'extract' for nonexistent titles
+        mock_response.json.return_value = {
+            "query": {
+                "pages": {
+                    "-1": {
+                        "ns": 0,
+                        "title": "NonexistentArticle",
+                        "missing": ""
+                    }
+                }
+            }
+        }
+        mock_get.return_value = mock_response
 
-            # Second call — should use cached dict, not re-iterate
-            result2 = ingester._fetch_article("Postmodernism")
-            assert result2 == "Postmodernism is..."
-            # load_dataset should NOT be called again
-            mock_load.assert_called_once()
+        ingester = WikipediaIngester(domains=["Modernism"], seed_titles=["NonexistentArticle"])
+        result = ingester._fetch_article("NonexistentArticle")
 
-    def test_fetch_article_not_found(self):
-        """_fetch_article returns None for missing articles."""
-        mock_ds = MagicMock()
-        mock_ds.__iter__ = lambda self: iter([{"title": "Modernism", "text": "Modernism is..."}])
+        assert result is None
 
-        with patch("datasets.load_dataset") as mock_load:
-            mock_load.return_value = mock_ds
-            ingester = WikipediaIngester(domains=["Modernism"], seed_titles=["Modernism"])
-            ingester._fetch_article("Modernism")  # materialize
+    @patch("rhizome.corpus.wikipedia_ingester.requests.get")
+    def test_fetch_article_api_error(self, mock_get):
+        """_fetch_article raises IngesterError on HTTP error."""
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_get.return_value = mock_response
 
-            result = ingester._fetch_article("Nonexistent Article")
-            assert result is None
+        ingester = WikipediaIngester(domains=["Modernism"], seed_titles=["Modernism"])
+        with pytest.raises(IngesterError) as exc_info:
+            ingester._fetch_article("Modernism")
+        assert "500" in str(exc_info.value)
 
-    @patch("datasets.load_dataset")
-    def test_ingest_yields_chunks_for_found_articles(self, mock_load):
-        """ingest() yields chunks for articles found in HF dataset."""
-        mock_ds = MagicMock()
-        mock_ds.__iter__ = lambda self: iter([{"title": "Modernism", "text": "Modernism is a movement."}])
+    @patch("rhizome.corpus.wikipedia_ingester.requests.get")
+    def test_ingest_yields_chunks_for_found_articles(self, mock_get):
+        """ingest() yields chunks for articles found via Wikipedia API."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "query": {
+                "pages": {
+                    "12345": {
+                        "pageid": 12345,
+                        "title": "Modernism",
+                        "extract": "Modernism is a philosophical movement."
+                    }
+                }
+            }
+        }
+        mock_get.return_value = mock_response
 
-        mock_load.return_value = mock_ds
         ingester = WikipediaIngester(
             domains=["Modernism"],
             max_articles=10,
@@ -116,13 +152,32 @@ class TestWikipediaIngester:
         assert chunks[0].article_title == "Modernism"
         assert "Modernism" in chunks[0].text
 
-    @patch("datasets.load_dataset")
-    def test_ingest_skips_missing_articles(self, mock_load, capsys):
-        """Articles not in HF dataset are skipped with a warning."""
-        mock_ds = MagicMock()
-        mock_ds.__iter__ = lambda self: iter([{"title": "Modernism", "text": "Modernism is a movement."}])
+    @patch("rhizome.corpus.wikipedia_ingester.requests.get")
+    def test_ingest_skips_missing_articles(self, mock_get):
+        """Articles not found on Wikipedia are skipped with a warning."""
+        # First call returns Modernism, second call returns missing
+        mock_responses = [
+            MagicMock(status_code=200, json=lambda: {
+                "query": {
+                    "pages": {
+                        "12345": {
+                            "pageid": 12345,
+                            "title": "Modernism",
+                            "extract": "Modernism is a philosophical movement."
+                        }
+                    }
+                }
+            }),
+            MagicMock(status_code=200, json=lambda: {
+                "query": {
+                    "pages": {
+                        "-1": {"title": "NonexistentArticle", "missing": ""}
+                    }
+                }
+            }),
+        ]
+        mock_get.side_effect = mock_responses
 
-        mock_load.return_value = mock_ds
         ingester = WikipediaIngester(
             domains=["Modernism"],
             max_articles=10,
