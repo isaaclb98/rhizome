@@ -1,28 +1,18 @@
-FROM python:3.14-slim AS builder
+FROM python:3.14-slim
 
 WORKDIR /app
 
 # Install uv for fast dependency installation
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Install dependencies into a virtual environment
-COPY pyproject.toml uv.lock* ./
-RUN uv sync --frozen --no-install-project --no-dev
-
-# Final stage
-FROM python:3.14-slim
-
-WORKDIR /app
-
-# Copy virtual environment from builder
-COPY --from=builder /app/.venv /app/.venv
-
-# Copy source
-COPY rhizome /app/rhizome
+# Copy source and config
+COPY pyproject.toml uv.lock* README.md rhizome /app/
 COPY config.yaml /app/config.yaml
 
-# Install the package
-RUN /app/.venv/bin/pip install --no-deps -e .
+# Install dependencies and the project package
+RUN uv sync --frozen --no-dev --no-install-project && \
+    uv pip install pip hatchling editables && \
+    uv pip install --no-deps -e . -v
 
 # Non-root user for security
 RUN useradd --create-home rhizome
