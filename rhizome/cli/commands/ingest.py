@@ -9,7 +9,7 @@ from rhizome.corpus.chunker import Chunker
 from rhizome.embedder.openai import OpenAIEmbedder
 from rhizome.vectorstore.collection import CollectionManager
 
-BATCH_SIZE = 50
+BATCH_SIZE = 10
 
 
 @click.command()

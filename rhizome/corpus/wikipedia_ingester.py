@@ -1,4 +1,4 @@
-"""Wikipedia article ingestion via PetScan + HuggingFace dataset."""
+"""Wikipedia article ingestion via PetScan + Wikipedia API."""
 
 import sys
 import time
@@ -9,6 +9,7 @@ from rhizome.corpus.chunker import Chunker, Chunk
 
 
 PETSCAN_URL = "https://petscan.wmflabs.org/"
+WIKIPEDIA_API = "https://en.wikipedia.org/w/api.php"
 
 
 def _petscan_with_retry(url: str, params: dict, timeout: int = 60, max_retries: int = 5) -> requests.Response:
@@ -32,8 +33,8 @@ class WikipediaIngester:
 
     Discovery strategy: queries PetScan with category names to get the full
     set of articles in those Wikipedia categories (including subcategory members
-    up to the configured depth). Article text is then looked up by title
-    from the HuggingFace wikimedia/wikipedia dataset snapshot.
+    up to the configured depth). Article text is fetched on-demand via the
+    Wikipedia API, one article at a time.
 
     Falls back to a seed list of article titles if provided.
     """
@@ -51,7 +52,6 @@ class WikipediaIngester:
         self.seed_titles = seed_titles or []
         self.chunker = chunker or Chunker()
         self.depth = depth
-        self._hf_stream = None
 
     def ingest(self) -> Iterator[Chunk]:
         """Fetch articles and yield all chunks.
@@ -60,7 +60,7 @@ class WikipediaIngester:
             Chunk objects for each article paragraph.
 
         Raises:
-            IngesterError: If the HuggingFace dataset lookup fails or
+            IngesterError: If the Wikipedia API lookup fails or
                           PetScan is unreachable.
         """
         titles = self._discover_articles()
@@ -68,7 +68,7 @@ class WikipediaIngester:
             try:
                 article_text = self._fetch_article(title)
                 if article_text is None:
-                    print(f"Warning: '{title}' not found in HuggingFace dataset, skipping", file=sys.stderr)
+                    print(f"Warning: '{title}' not found on Wikipedia, skipping", file=sys.stderr)
                     continue
                 chunks = self.chunker.chunk_article(
                     article_title=title,
@@ -110,30 +110,34 @@ class WikipediaIngester:
         return list({article["title"].replace("_", " ") for article in articles})
 
     def _fetch_article(self, title: str) -> Optional[str]:
-        """Look up article text from the HuggingFace wikimedia/wikipedia dataset.
+        """Fetch article text from the Wikipedia API.
 
-        The dataset is loaded once and materialized into memory for O(1) lookups.
-        Wikipedia's 20231101.en snapshot is ~16GB. For large max_articles values
-        this may require significant RAM.
+        Makes an HTTP request to the Wikipedia API for each article.
+        No dataset materialization — constant memory overhead.
 
         Returns:
-            The article text, or None if the title is not in the dataset snapshot.
+            The article text, or None if the title does not exist.
         """
-        if self._hf_stream is None:
-            from datasets import load_dataset
+        params = {
+            "action": "query",
+            "titles": title,
+            "prop": "extracts",
+            "explaintext": True,
+            "format": "json",
+        }
+        headers = {
+            "User-Agent": "Rhizome/0.1.0 (Wikipedia Vector Corpus Builder; mailto:contact@example.com)"
+        }
+        response = requests.get(WIKIPEDIA_API, params=params, headers=headers, timeout=30)
+        if response.status_code != 200:
+            raise IngesterError(f"Wikipedia API error: {response.status_code}")
 
-            ds = load_dataset(
-                "wikimedia/wikipedia",
-                "20231101.en",
-                split="train",
-                streaming=True,
-            )
-            # Materialize the full snapshot for O(1) lookups.
-            # For very large corpora (50k+ articles), consider a machine with
-            # more RAM or a sharded dataset approach.
-            self._hf_stream = {example["title"]: example["text"] for example in ds}
-
-        return self._hf_stream.get(title)
+        data = response.json()
+        pages = data.get("query", {}).get("pages", {})
+        for page_data in pages.values():
+            if "extract" in page_data:
+                return page_data["extract"]
+        return None
 
 
 class IngesterError(Exception):

@@ -10,7 +10,9 @@ class VectorStoreClient:
     """Wrapper around Qdrant client for vector search operations."""
 
     def __init__(self, url: str = "http://localhost:6333", api_key: str | None = None, collection_name: str = "modernity-v1"):
-        self.client = QdrantClient(url=url, api_key=api_key)
+        # When using HTTPS, Qdrant Cloud serves on port 443 (not the default 6333)
+        port = 443 if url.startswith("https://") else None
+        self.client = QdrantClient(url=url, api_key=api_key, port=port)
         self.collection_name = collection_name
 
     def search(
