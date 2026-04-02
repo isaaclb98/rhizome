@@ -9,7 +9,7 @@ class TestChunker:
 
     def test_split_paragraph_boundary(self):
         """Short paragraphs are preserved as single chunks."""
-        chunker = Chunker(max_chars=500)
+        chunker = Chunker(max_chars=500, min_chars=0)
         chunks = chunker.chunk_article(
             article_title="Test Article",
             article_url="https://en.wikipedia.org/wiki/Test_Article",
@@ -22,7 +22,7 @@ class TestChunker:
 
     def test_long_paragraph_split_at_sentence_boundary(self):
         """Paragraphs > max_chars are split at sentence boundaries."""
-        chunker = Chunker(max_chars=50)
+        chunker = Chunker(max_chars=50, min_chars=0)
         text = "This is the first sentence. This is the second sentence. This is the third sentence."
         chunks = chunker.chunk_article(
             article_title="Test",
@@ -37,7 +37,7 @@ class TestChunker:
 
     def test_duplicate_chunk_deduplication(self):
         """Same text across articles produces unique UUID IDs."""
-        chunker = Chunker()
+        chunker = Chunker(min_chars=0)
         chunks_a = chunker.chunk_article("Article A", "https://example.com/a", "Same text here.")
         chunks_b = chunker.chunk_article("Article B", "https://example.com/b", "Same text here.")
 
@@ -48,7 +48,7 @@ class TestChunker:
 
     def test_slugify(self):
         """Article titles are slugified into chunk IDs stored in payload."""
-        chunker = Chunker()
+        chunker = Chunker(min_chars=0)
         chunks = chunker.chunk_article(
             article_title="Modernism and Postmodernism",
             article_url="https://en.wikipedia.org/wiki/Modernism_and_Postmodernism",
@@ -60,18 +60,18 @@ class TestChunker:
 
     def test_empty_paragraphs_ignored(self):
         """Empty paragraphs do not produce chunks."""
-        chunker = Chunker()
+        chunker = Chunker(min_chars=0)
         chunks = chunker.chunk_article(
             article_title="Test",
             article_url="https://example.com/test",
-            article_text="Paragraph one.\n\n\n\nParagraph two.",
+            article_text="Paragraph one.\n\n\nParagraph two.",
         )
         assert len(chunks) == 2
         assert all(c.text.strip() for c in chunks)
 
     def test_bibliography_truncation(self):
         """Bibliography and reference sections are stripped before chunking."""
-        chunker = Chunker()
+        chunker = Chunker(min_chars=0)
         text = (
             "Modernism is characterized by a break with traditional ways of writing. "
             "It experiment with form and technique.\n\n"
@@ -88,3 +88,20 @@ class TestChunker:
         assert "See also" not in full_text
         assert "References" not in full_text
         assert "Modernism is characterized" in full_text
+
+    def test_min_chars_filters_short_chunks(self):
+        """Chunks shorter than min_chars are skipped."""
+        chunker = Chunker(min_chars=50)
+        chunks = chunker.chunk_article(
+            article_title="Test",
+            article_url="https://en.wikipedia.org/wiki/Test",
+            article_text=(
+                "Short header text.\n\n"
+                "This is a much longer paragraph with actual content that should be retained in the output."
+            ),
+        )
+        # First paragraph is under 50 chars — should be skipped
+        # Second paragraph is over 50 chars — should be retained
+        texts = [c.text for c in chunks]
+        assert "Short header text." not in " ".join(texts)
+        assert "much longer paragraph" in " ".join(texts)
