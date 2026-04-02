@@ -78,6 +78,29 @@ vectorstore:
   api_key: null  # no key needed for local
 ```
 
+### 4. Docker (optional)
+
+Rhizome is available as a pre-built image on Docker Hub:
+
+```bash
+# Start rhizome + Qdrant with one command
+docker compose up -d
+
+# Run ingest inside the container
+docker compose run --rm rhizome ingest --domain Modernism --domain Postmodernism --max-articles 500
+
+# Run traverse
+docker compose run --rm rhizome traverse "the tension between modernism and postmodernism"
+```
+
+For local development with hot-rebuild:
+
+```bash
+docker compose -f docker-compose.dev.yml up --build
+```
+
+**Environment variables:** Copy `.env.example` to `.env` and add your `OPENAI_API_KEY`. The compose file reads from `.env` automatically.
+
 ---
 
 ## Ingest: Build the corpus
