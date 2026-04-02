@@ -3,6 +3,7 @@
 import pytest
 from unittest.mock import patch, MagicMock
 from rhizome.corpus.wikipedia_ingester import WikipediaIngester, IngesterError
+from rhizome.corpus.chunker import Chunker
 
 
 class TestWikipediaIngester:
@@ -145,6 +146,7 @@ class TestWikipediaIngester:
             domains=["Modernism"],
             max_articles=10,
             seed_titles=["Modernism"],
+            chunker=Chunker(min_chars=0),
         )
 
         chunks = list(ingester.ingest())
@@ -182,6 +184,7 @@ class TestWikipediaIngester:
             domains=["Modernism"],
             max_articles=10,
             seed_titles=["Modernism", "NonexistentArticle"],
+            chunker=Chunker(min_chars=0),
         )
 
         chunks = list(ingester.ingest())

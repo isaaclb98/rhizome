@@ -58,8 +58,9 @@ class Chunker:
     Bibliography and reference sections are stripped before chunking.
     """
 
-    def __init__(self, max_chars: int = 500):
+    def __init__(self, max_chars: int = 500, min_chars: int = 50):
         self.max_chars = max_chars
+        self.min_chars = min_chars
 
     def chunk_article(self, article_title: str, article_url: str, article_text: str) -> list[Chunk]:
         """Split a single article into chunks.
@@ -82,6 +83,11 @@ class Chunker:
             if not para:
                 continue
 
+            # Skip chunks shorter than min_chars — these are usually headers,
+            # single-line notes, or other noise that shouldn't be embedded.
+            if len(para) < self.min_chars:
+                continue
+
             if len(para) <= self.max_chars:
                 chunks.append(Chunk(
                     id=str(uuid.uuid4()),
@@ -92,10 +98,11 @@ class Chunker:
             else:
                 sub_chunks = self._split_at_sentences(para, self.max_chars)
                 for j, sub in enumerate(sub_chunks):
-                    if sub.strip():
+                    sub = sub.strip()
+                    if sub and len(sub) >= self.min_chars:
                         chunks.append(Chunk(
                             id=str(uuid.uuid4()),
-                            text=sub.strip(),
+                            text=sub,
                             article_title=article_title,
                             article_url=article_url,
                         ))
