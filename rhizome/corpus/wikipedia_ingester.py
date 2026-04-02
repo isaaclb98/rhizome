@@ -143,10 +143,10 @@ class WikipediaIngester:
             "format": "json",
         }
         # Wikipedia API requires a real contact method in User-Agent.
-        # Set WIKIPEDIA_USER_AGENT env var to your email, or keep the default.
+        # Set WIKIPEDIA_USER_AGENT env var to override.
         user_agent = os.environ.get(
             "WIKIPEDIA_USER_AGENT",
-            "Rhizome/0.1.0 (Wikipedia Vector Corpus Builder; mailto:your@email.com)",
+            "Rhizome/0.1.0 (Wikipedia Vector Corpus Builder; mailto:isaacbarney@hotmail.com)",
         )
         headers = {"User-Agent": user_agent}
         response = _http_with_retry(WIKIPEDIA_API, params=params, headers=headers)
