@@ -67,7 +67,9 @@ class TraversalEngine:
         path: list[TraversalStep] = []
         consecutive_fallback = 0
         in_forced_jump = False
-
+        # Tracks consecutive picks from the same article (for hard block)
+        consecutive_same_article = 0
+        last_article_slug: str | None = None
         # Rolling window of recent article slugs for hard dedup
         article_window: collections.deque = collections.deque(maxlen=self.config.max_same_article_consecutive)
 
@@ -101,22 +103,26 @@ class TraversalEngine:
                     break  # No unvisited chunks at all
                 in_forced_jump = True
                 consecutive_fallback = 0
-                # Clear rolling window on global jump — semantic reset
-                article_window.clear()
+                # Reset consecutive counter on global jump — semantic reset
+                consecutive_same_article = 0
+                last_article_slug = None
             else:
                 # Normal epsilon-greedy selection
                 explore_fired = random.random() < self.config.epsilon
 
                 if explore_fired:
-                    # Explore: pick a random candidate from top_k
+                    # Explore: pick a random candidate from top_k (no article block)
                     selected = random.choice(candidates)
                 else:
-                    # Exploit: filter blocked articles, then temperature-sample
+                    # Exploit: filter blocked articles
                     blocked_slugs = set(article_window) if self.config.max_same_article_consecutive > 0 else set()
                     filtered = [c for c in candidates if extract_article_slug(c["id"]) not in blocked_slugs]
 
-                    if len(filtered) < 2 and self.config.max_same_article_consecutive > 0:
-                        # All candidates are from recently-seen articles — force global jump
+                    # If nothing left after blocking, or we've hit the consecutive limit,
+                    # force a global jump to escape this neighborhood
+                    if (len(filtered) == 0 or
+                            (consecutive_same_article >= self.config.max_same_article_consecutive
+                             and self.config.max_same_article_consecutive > 0)):
                         broad = self.vector_store.search(
                             query_vector=query_vector,
                             top_k=50,
@@ -126,7 +132,8 @@ class TraversalEngine:
                         if remaining:
                             selected = random.choice(remaining)
                             in_forced_jump = True
-                            article_window.clear()
+                            consecutive_same_article = 0
+                            last_article_slug = None
                         else:
                             break
                     else:
@@ -141,6 +148,7 @@ class TraversalEngine:
 
             # Build the step — include all candidates so the UI can draw kNN edges
             payload = selected["payload"]
+            article_slug = extract_article_slug(payload["id"])
             step = TraversalStep(
                 chunk_id=payload["id"],
                 text=payload["text"],
@@ -155,10 +163,15 @@ class TraversalEngine:
             path.append(step)
             visited_ids.add(payload["id"])
 
-            # Update rolling window (only for non-global-jump steps)
+            # Update consecutive counter and rolling window
             if not in_forced_jump:
-                article_slug = extract_article_slug(payload["id"])
-                article_window.append(article_slug)
+                if article_slug == last_article_slug:
+                    consecutive_same_article += 1
+                else:
+                    consecutive_same_article = 1
+                    last_article_slug = article_slug
+                if self.config.max_same_article_consecutive > 0:
+                    article_window.append(article_slug)
 
             # After a forced jump, next step is normal traversal
             in_forced_jump = False
