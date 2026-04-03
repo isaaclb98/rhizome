@@ -41,6 +41,7 @@ class TestFormatter:
                 depth=0,
                 similarity=0.95,
                 forced_jump=False,
+                candidates=[],
             )
         ]
         result = stitch_to_markdown("Modernism", path)
@@ -62,6 +63,7 @@ class TestFormatter:
                 depth=0,
                 similarity=0.95,
                 forced_jump=False,
+                candidates=[],
             ),
             TraversalStep(
                 chunk_id="postmodernism-001",
@@ -72,6 +74,7 @@ class TestFormatter:
                 depth=1,
                 similarity=0.88,
                 forced_jump=False,
+                candidates=[],
             ),
         ]
         result = stitch_to_markdown("Concept", path)
@@ -94,6 +97,7 @@ class TestFormatter:
                 depth=0,
                 similarity=0.95,
                 forced_jump=False,
+                candidates=[],
             )
         ]
         result = stitch_to_markdown("Concept", path)
