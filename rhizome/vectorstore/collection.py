@@ -83,30 +83,17 @@ class CollectionManager:
         return self.client.collection_exists(collection_name=collection_name)
 
     def delete_chunks_by_article(self, collection_name: str, article_title: str):
-        """Delete all chunks for an article by scrolling and filtering.
+        """Delete all chunks for an article using delete-by-filter.
 
         Args:
             collection_name: Name of the collection.
             article_title: Article title to delete chunks for.
         """
-        from qdrant_client.models import Filter, FieldCondition, MatchValue, PointIdsList
+        from qdrant_client.models import Filter, FieldCondition, MatchValue
 
-        offset = None
-        while True:
-            results, offset = self.client.scroll(
-                collection_name=collection_name,
-                scroll_filter=Filter(
-                    must=[FieldCondition(key="article_title", match=MatchValue(value=article_title))]
-                ),
-                offset=offset,
-                limit=100,
-            )
-            if not results:
-                break
-            point_ids = [point.id for point in results]
-            self.client.delete(
-                collection_name=collection_name,
-                points_selector=PointIdsList(points=point_ids),
-            )
-            if offset is None:
-                break
+        self.client.delete(
+            collection_name=collection_name,
+            points_selector=Filter(
+                must=[FieldCondition(key="article_title", match=MatchValue(value=article_title))]
+            ),
+        )
