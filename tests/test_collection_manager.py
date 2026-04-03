@@ -60,8 +60,12 @@ class TestCollectionManager:
         call_kwargs = mock_client.upsert.call_args[1]
         points = call_kwargs["points"]
         assert len(points) == 1
-        assert points[0].id == "modernism-001"
+        # Point ID is now a UUID (derived from slug), not the slug itself
+        assert points[0].id != "modernism-001"
+        assert len(points[0].id) == 36  # UUID format
         assert points[0].vector == [0.1] * 1536
+        # Original slug ID is preserved in payload
+        assert points[0].payload["id"] == "modernism-001"
         assert points[0].payload["article_title"] == "Modernism"
 
     @patch("rhizome.vectorstore.collection.QdrantClient")
