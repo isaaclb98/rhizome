@@ -86,7 +86,7 @@ export default function PathPanel({ path, selectedChunkId, onSelectChunk }) {
   }
 
   return (
-    <aside className="flex-1 min-h-0 border-r border-bg-tertiary flex flex-col bg-bg-primary">
+    <aside className="h-full border-r border-bg-tertiary flex flex-col bg-bg-primary">
       <div className="flex-none px-3 py-2 border-b border-bg-tertiary bg-bg-secondary">
         <div className="text-xs text-gray-400 font-medium">
           Path — {path.length} chunks
