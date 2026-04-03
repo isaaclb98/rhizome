@@ -5,11 +5,20 @@ export default function Controls({ params, onTraverse, isLoading }) {
   const [depth, setDepth] = useState(params.depth);
   const [epsilon, setEpsilon] = useState(params.epsilon);
   const [topK, setTopK] = useState(params.top_k);
+  const [temperature, setTemperature] = useState(params.temperature);
+  const [maxSameArticle, setMaxSameArticle] = useState(params.max_same_article_consecutive);
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!query.trim()) return;
-    onTraverse({ query: query.trim(), depth, epsilon, top_k: topK });
+    onTraverse({
+      query: query.trim(),
+      depth,
+      epsilon,
+      top_k: topK,
+      temperature,
+      max_same_article_consecutive: maxSameArticle,
+    });
   };
 
   return (
@@ -77,6 +86,41 @@ export default function Controls({ params, onTraverse, isLoading }) {
           max={20}
           value={topK}
           onChange={(e) => setTopK(Number(e.target.value))}
+          className="w-full bg-bg-secondary border border-bg-tertiary rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-blue-500 transition-colors"
+          disabled={isLoading}
+        />
+      </div>
+
+      {/* Temperature */}
+      <div className="w-24">
+        <label className="block text-xs text-gray-400 mb-1" htmlFor="temperature">
+          Temp <span className="text-gray-600">(0-3)</span>
+        </label>
+        <input
+          id="temperature"
+          type="number"
+          min={0}
+          max={3}
+          step={0.1}
+          value={temperature}
+          onChange={(e) => setTemperature(Number(e.target.value))}
+          className="w-full bg-bg-secondary border border-bg-tertiary rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-blue-500 transition-colors"
+          disabled={isLoading}
+        />
+      </div>
+
+      {/* Max Same Article */}
+      <div className="w-28">
+        <label className="block text-xs text-gray-400 mb-1" htmlFor="maxSameArticle">
+          Same Art. <span className="text-gray-600">(0-20)</span>
+        </label>
+        <input
+          id="maxSameArticle"
+          type="number"
+          min={0}
+          max={20}
+          value={maxSameArticle}
+          onChange={(e) => setMaxSameArticle(Number(e.target.value))}
           className="w-full bg-bg-secondary border border-bg-tertiary rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-blue-500 transition-colors"
           disabled={isLoading}
         />

@@ -1,5 +1,7 @@
 """Epsilon-greedy traversal engine for rhizomatic vector-space walk."""
 
+import collections
+import math
 import random
 from dataclasses import dataclass
 
@@ -65,6 +67,11 @@ class TraversalEngine:
         path: list[TraversalStep] = []
         consecutive_fallback = 0
         in_forced_jump = False
+        # Tracks consecutive picks from the same article (for hard block)
+        consecutive_same_article = 0
+        last_article_slug: str | None = None
+        # Rolling window of recent article slugs for hard dedup
+        article_window: collections.deque = collections.deque(maxlen=self.config.max_same_article_consecutive)
 
         for depth in range(self.config.depth):
             # Search excluding visited chunks
@@ -96,14 +103,62 @@ class TraversalEngine:
                     break  # No unvisited chunks at all
                 in_forced_jump = True
                 consecutive_fallback = 0
+                # Reset consecutive counter on global jump — semantic reset
+                consecutive_same_article = 0
+                last_article_slug = None
+                # Clear article window on forced jump since we're escaping this neighborhood
+                article_window.clear()
+                # Record the jumped article so article_window is correct for next step
+                jumped_article_slug = extract_article_slug(selected["payload"]["id"])
+                if self.config.max_same_article_consecutive > 0:
+                    article_window.append(jumped_article_slug)
             else:
                 # Normal epsilon-greedy selection
-                selected, explore_fired = self._epsilon_greedy_select(
-                    candidates=candidates,
-                    epsilon=self.config.epsilon,
-                )
+                explore_fired = random.random() < self.config.epsilon
+
+                if explore_fired:
+                    # Explore: pick a random candidate from top_k (no article block)
+                    selected = random.choice(candidates)
+                else:
+                    # Exploit: filter blocked articles
+                    blocked_slugs = set(article_window) if self.config.max_same_article_consecutive > 0 else set()
+                    filtered = [c for c in candidates if extract_article_slug(c["payload"]["id"]) not in blocked_slugs]
+
+                    # If nothing left after blocking, or we've hit the consecutive limit,
+                    # force a global jump to escape this neighborhood
+                    if (len(filtered) == 0 or
+                            (consecutive_same_article >= self.config.max_same_article_consecutive
+                             and self.config.max_same_article_consecutive > 0)):
+                        broad = self.vector_store.search(
+                            query_vector=query_vector,
+                            top_k=50,
+                            with_vector=False,
+                        )
+                        # Exclude both visited IDs and articles in the rolling window
+                        blocked_jump_slugs = set(article_window) if self.config.max_same_article_consecutive > 0 else set()
+                        remaining = [
+                            c for c in broad
+                            if c["payload"]["id"] not in visited_ids
+                            and extract_article_slug(c["payload"]["id"]) not in blocked_jump_slugs
+                        ]
+                        if remaining:
+                            selected = random.choice(remaining)
+                            in_forced_jump = True
+                            consecutive_same_article = 0
+                            last_article_slug = None
+                            # Clear article window on forced jump since we're escaping this neighborhood
+                            article_window.clear()
+                            # Record the jumped article so article_window is correct for next step
+                            jumped_article_slug = extract_article_slug(selected["payload"]["id"])
+                            if self.config.max_same_article_consecutive > 0:
+                                article_window.append(jumped_article_slug)
+                        else:
+                            break
+                    else:
+                        # Temperature softmax sampling from filtered candidates
+                        selected = _softmax_sample(filtered, self.config.temperature)
+
                 # Track fallback: we fell back when the best candidate was already visited
-                # (epsilon exploration is tracked separately)
                 if not explore_fired and selected["id"] != candidates[0]["id"]:
                     consecutive_fallback += 1
                 else:
@@ -111,6 +166,7 @@ class TraversalEngine:
 
             # Build the step — include all candidates so the UI can draw kNN edges
             payload = selected["payload"]
+            article_slug = extract_article_slug(payload["id"])
             step = TraversalStep(
                 chunk_id=payload["id"],
                 text=payload["text"],
@@ -125,6 +181,16 @@ class TraversalEngine:
             path.append(step)
             visited_ids.add(payload["id"])
 
+            # Update consecutive counter and rolling window
+            if not in_forced_jump:
+                if article_slug == last_article_slug:
+                    consecutive_same_article += 1
+                else:
+                    consecutive_same_article = 1
+                    last_article_slug = article_slug
+                if self.config.max_same_article_consecutive > 0:
+                    article_window.append(article_slug)
+
             # After a forced jump, next step is normal traversal
             in_forced_jump = False
 
@@ -138,30 +204,30 @@ class TraversalEngine:
 
         return path
 
-    def _epsilon_greedy_select(
-        self,
-        candidates: list[dict],
-        epsilon: float,
-    ) -> tuple[dict, bool]:
-        """Select a candidate using epsilon-greedy strategy.
 
-        Args:
-            candidates: List of candidate results from vector search.
-            epsilon: Probability of random exploration.
+def extract_article_slug(chunk_id: str) -> str:
+    """Extract article slug from a chunk ID.
 
-        Returns:
-            A tuple of (selected candidate dict, explore_fired bool).
-            explore_fired is True when epsilon triggered random exploration.
-        """
-        if not candidates:
-            raise TraversalError("No candidates to select from")
+    Examples:
+        "modernism-001" → "modernism"
+        "post-modernism-001" → "post-modernism"
+    """
+    return chunk_id.rsplit("-", 1)[0]
 
-        if random.random() < epsilon:
-            # Explore: pick a random candidate
-            return random.choice(candidates), True
-        else:
-            # Exploit: pick the nearest (first in sorted list)
-            return candidates[0], False
+
+def _softmax_sample(candidates: list[dict], temperature: float) -> dict:
+    """Sample from candidates using softmax over similarity scores.
+
+    Uses max-shift for numerical stability: exp((score - max) / temperature).
+    """
+    if temperature < 0.01:
+        return candidates[0]  # greedy
+
+    scores = [c["score"] for c in candidates]
+    max_score = max(scores)
+    # Weights proportional to exp((score - max) / temperature)
+    weights = [math.exp((s - max_score) / temperature) for s in scores]
+    return random.choices(candidates, weights=weights, k=1)[0]
 
 
 class TraversalError(Exception):

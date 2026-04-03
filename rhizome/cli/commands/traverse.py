@@ -30,6 +30,16 @@ from rhizome.stitching.formatter import stitch_to_markdown
     help="Number of candidates per step (overrides config)",
 )
 @click.option(
+    "--temperature",
+    type=float,
+    help="Softmax temperature for exploit path: 0=greedy, 1=natural, 2+=flat (overrides config)",
+)
+@click.option(
+    "--max-same-article-consecutive",
+    type=int,
+    help="Hard block: max consecutive chunks from the same article (0=disabled, overrides config)",
+)
+@click.option(
     "--output",
     "-o",
     type=click.Path(),
@@ -40,6 +50,8 @@ def traverse(
     depth: int | None,
     epsilon: float | None,
     top_k: int | None,
+    temperature: float | None,
+    max_same_article_consecutive: int | None,
     output: str | None,
 ):
     """Traverse Wikipedia embeddings and produce a narrative document.
@@ -56,8 +68,14 @@ def traverse(
     depth = depth if depth is not None else cfg.default_depth
     epsilon = epsilon if epsilon is not None else cfg.epsilon
     top_k = top_k if top_k is not None else cfg.top_k
+    temperature = temperature if temperature is not None else cfg.temperature
+    max_same_article_consecutive = (
+        max_same_article_consecutive
+        if max_same_article_consecutive is not None
+        else cfg.max_same_article_consecutive
+    )
 
-    click.echo(f"Traversing: concept='{concept}', depth={depth}, epsilon={epsilon}")
+    click.echo(f"Traversing: concept='{concept}', depth={depth}, epsilon={epsilon}, temperature={temperature}")
 
     # Set up components
     embedder = get_embedder(
@@ -93,6 +111,8 @@ def traverse(
         epsilon=epsilon,
         top_k=top_k,
         collection_name=cfg.qdrant_collection,
+        temperature=temperature,
+        max_same_article_consecutive=max_same_article_consecutive,
     )
     engine = TraversalEngine(embedder=embedder, vector_store=vector_store, config=config)
 
