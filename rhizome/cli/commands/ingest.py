@@ -30,7 +30,7 @@ def ingest(domains: tuple[str, ...] | None):
 
     domain_list = list(domains) if domains else cfg.wikipedia_domains
 
-    click.echo(f"Starting ingestion: domains={domain_list}")
+    click.echo(f"Starting ingestion: domains={domain_list}, depth={cfg.wikipedia_depth}")
 
     # Set up components
     embedder = get_embedder(
@@ -56,7 +56,7 @@ def ingest(domains: tuple[str, ...] | None):
     # Discover articles first (to get actual count for progress bar)
     ingester = WikipediaIngester(
         domains=domain_list,
-        depth=1,
+        depth=cfg.wikipedia_depth,
         chunker=Chunker(),
     )
     discovered_titles = ingester._discover_articles()
