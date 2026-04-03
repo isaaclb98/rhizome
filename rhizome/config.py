@@ -68,7 +68,9 @@ class RhizomeConfig(BaseSettings):
     )
     default_depth: int = Field(default=8, alias="DEFAULT_DEPTH")
     epsilon: float = Field(default=0.1, alias="EPSILON")
-    top_k: int = Field(default=5, alias="TOP_K")
+    top_k: int = Field(default=20, alias="TOP_K")
+    temperature: float = Field(default=1.0, alias="TEMPERATURE")
+    max_same_article_consecutive: int = Field(default=2, alias="MAX_SAME_ARTICLE_CONSECUTIVE")
 
     # ── Validators ──────────────────────────────────────────────────────────────
 

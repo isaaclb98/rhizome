@@ -40,7 +40,9 @@ class TraverseRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=500)
     depth: int = Field(default=8, ge=1, le=20)
     epsilon: float = Field(default=0.1, ge=0.0, le=1.0)
-    top_k: int = Field(default=5, ge=1, le=20)
+    top_k: int = Field(default=20, ge=1, le=20)
+    temperature: float = Field(default=1.0, ge=0.0, le=3.0)
+    max_same_article_consecutive: int = Field(default=2, ge=0, le=20)
 
 
 class CandidateResponse(BaseModel):
@@ -75,6 +77,8 @@ class TraversalStatsResponse(BaseModel):
     epsilon: float
     top_k: int
     forced_jumps: int
+    temperature: float
+    max_same_article_consecutive: int
 
 
 class TraverseResponse(BaseModel):
@@ -194,6 +198,8 @@ def traverse(req: TraverseRequest):
         epsilon=req.epsilon,
         top_k=req.top_k,
         collection_name=_config.qdrant_collection,
+        temperature=req.temperature,
+        max_same_article_consecutive=req.max_same_article_consecutive,
     )
     engine = TraversalEngine(
         embedder=_embedder,
@@ -246,6 +252,8 @@ def traverse(req: TraverseRequest):
             epsilon=req.epsilon,
             top_k=req.top_k,
             forced_jumps=forced_jumps,
+            temperature=req.temperature,
+            max_same_article_consecutive=req.max_same_article_consecutive,
         ),
     )
 
