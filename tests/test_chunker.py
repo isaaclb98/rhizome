@@ -121,3 +121,62 @@ class TestChunker:
         texts = [c.text for c in chunks]
         assert "Short header text." not in " ".join(texts)
         assert "much longer paragraph" in " ".join(texts)
+
+    def test_bare_wikipedia_headers_are_skipped(self):
+        """Bare Wikipedia section headers (=== ... ===) are skipped as standalone chunks."""
+        chunker = Chunker(min_chars=50)
+        chunks = chunker.chunk_article(
+            article_title="Mikhail Bakhtin",
+            article_url="https://en.wikipedia.org/wiki/Mikhail_Bakhtin",
+            article_text=(
+                "Mikhail Bakhtin was a Russian literary critic. "
+                "His work on dialogism and polyphony influenced literary theory.\n\n"
+                "=== Problems of Dostoevsky's Poetics: polyphony and unfinalizability ===\n\n"
+                "This paragraph discusses the key concepts in Problems of Dostoevsky's Poetics."
+            ),
+            domain="Critical theory",
+        )
+        texts = [c.text for c in chunks]
+        # The bare header should not appear as a standalone chunk.
+        # It should NOT appear as its own chunk (i.e., starting with "===").
+        for t in texts:
+            assert not t.startswith('==='), f"Bare header appeared as chunk: {t!r}"
+        # But the content paragraphs should be preserved
+        assert "Mikhail Bakhtin was a Russian" in " ".join(texts)
+        assert "This paragraph discusses" in " ".join(texts)
+
+    def test_wikipedia_header_with_content_is_kept(self):
+        """A Wikipedia header followed by content on the same line is treated as content."""
+        chunker = Chunker(min_chars=50)
+        chunks = chunker.chunk_article(
+            article_title="Fred Poché",
+            article_url="https://en.wikipedia.org/wiki/Fred_Poch%C3%A9",
+            article_text=(
+                "== Published works == Une éthique du vivre ensemble. La publication majeure.\n\n"
+                "Some other paragraph with substantial content."
+            ),
+            domain="Philosophy",
+        )
+        texts = [c.text for c in chunks]
+        # The header + content should NOT be skipped — it's meaningful prose
+        assert any("Published works" in t or "Une éthique" in t for t in texts)
+
+    def test_header_levels_are_all_skipped(self):
+        """All Wikipedia header levels (==, ===, ====, =====) are skipped when bare."""
+        chunker = Chunker(min_chars=20)
+        chunks = chunker.chunk_article(
+            article_title="Test",
+            article_url="https://en.wikipedia.org/wiki/Test",
+            article_text=(
+                "== Section One ==\n\n"  # header-level content
+                "=== Section Two ===\n\n"  # subsection
+                "==== Section Three ====\n\n"  # sub-subsection
+                "===== Section Four =====\n\n"  # deep header
+                "Actual paragraph content that should be retained."
+            ),
+            domain="Modernism",
+        )
+        texts = [c.text for c in chunks]
+        # Only the actual content paragraph should be a chunk
+        assert len(chunks) == 1
+        assert "Actual paragraph content" in texts[0]
