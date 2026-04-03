@@ -47,11 +47,6 @@ export default function Sidebar({ selectedNode, stats, pathIndex }) {
 
         <div className="flex items-center gap-2 flex-wrap">
           <DomainBadge domain={selectedNode.domain} />
-          {selectedNode.forced_jump && (
-            <span className="inline-block px-2 py-0.5 rounded text-xs font-medium bg-orange-900/40 text-orange-400">
-              Forced jump
-            </span>
-          )}
         </div>
       </div>
 
