@@ -78,9 +78,11 @@ class TraversalEngine:
             # Forced global jump: 2+ consecutive fallbacks means we're stuck
             if in_forced_jump or consecutive_fallback >= 2:
                 # Do a forced global jump — broad search then random pick
+                # Pass with_vector=False since we only use IDs for random selection
                 broad = self.vector_store.search(
                     query_vector=query_vector,
                     top_k=50,
+                    with_vector=False,
                 )
                 remaining = [c for c in broad if c["id"] not in visited_ids]
                 if remaining:
@@ -117,10 +119,13 @@ class TraversalEngine:
             # After a forced jump, next step is normal traversal
             in_forced_jump = False
 
-            # Use the selected chunk's vector as the next query
-            # In a full implementation, we would store vectors alongside payloads
-            # For now, we re-embed the selected text as a proxy
-            query_vector = self.embedder.embed([payload["text"]])[0]
+            # Use the selected chunk's stored vector as the next query.
+            # Fall back to re-embedding only if the stored vector is unavailable.
+            stored_vector = selected.get("vector")
+            if stored_vector is not None:
+                query_vector = stored_vector
+            else:
+                query_vector = self.embedder.embed([payload["text"]])[0]
 
         return path
 
