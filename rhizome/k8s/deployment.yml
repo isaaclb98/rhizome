@@ -1,0 +1,90 @@
+# Rhizome k8s deployment
+#
+# Prerequisites:
+#   kubectl create secret generic rhizome-secrets \
+#     --from-literal=openai-api-key="$OPENAI_API_KEY"
+#
+#   # Qdrant must be pre-provisioned and accessible
+#   # Ensure the collection exists and has the domain field in all point payloads
+#   # (run rhizome/migrations/add_domain_field.py if collection was created before v0.4.0)
+#
+# Apply:
+#   kubectl apply -f rhizome/k8s/deployment.yml
+#
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rhizome
+  labels:
+    app: rhizome
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: rhizome
+  template:
+    metadata:
+      labels:
+        app: rhizome
+    spec:
+      containers:
+        - name: rhizome
+          image: isaaclb98/rhizome:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: QDRANT_URL
+              value: "https://qdrant.yourcluster.com:6333"
+            - name: QDRANT_COLLECTION
+              value: "modernity-v1"
+            - name: QDRANT_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: rhizome-secrets
+                  key: qdrant-api-key
+                  optional: true
+            - name: EMBEDDER_TYPE
+              value: "openai"
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: rhizome-secrets
+                  key: openai-api-key
+            - name: RHIZOME_STATIC_DIR
+              value: "/app/static"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rhizome
+  labels:
+    app: rhizome
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 80
+      targetPort: 8000
+      protocol: TCP
+  selector:
+    app: rhizome
