@@ -51,7 +51,7 @@ export default function App() {
 
   const handleNodeClick = useCallback((node) => {
     const id = node?.id ?? node?.chunk_id ?? null;
-    setSelectedChunkId((prev) => (prev === id ? null : id));
+    setSelectedChunkId((prev) => (prev === id ? prev : id));
   }, []);
 
   return (
