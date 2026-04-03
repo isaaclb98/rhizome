@@ -103,9 +103,8 @@ export default function Graph({ path, selectedChunkId, onNodeClick }) {
 
     const pathLine = panGroup.append('g')
       .selectAll('line').data(pathEdges).join('line')
-      .attr('stroke', (d) => d.forced ? '#f97316' : '#525766')
-      .attr('stroke-width', (d) => d.forced ? 1.5 : 1)
-      .attr('stroke-dasharray', (d) => d.forced ? '4,3' : null)
+      .attr('stroke', '#525766')
+      .attr('stroke-width', 1)
       .attr('opacity', 0.9)
       .attr('x1', (d) => getX(d.source)).attr('y1', (d) => getY(d.source))
       .attr('x2', (d) => getX(d.target)).attr('y2', (d) => getY(d.target));
@@ -208,7 +207,7 @@ export default function Graph({ path, selectedChunkId, onNodeClick }) {
         tooltip.style('opacity', 1).html(
           `<div style="font-weight:600;color:${d.color};margin-bottom:3px;font-size:11px">${d.fullTitle}</div>
            <div style="color:#9ca3af;margin-bottom:3px">${d.domain}</div>
-           <div style="color:#6b7280;font-size:10px">step ${d.stepIndex + 1} · sim ${d.similarity.toFixed(3)}${d.forced_jump ? ' · forced jump' : ''}</div>`
+           <div style="color:#6b7280;font-size:10px">step ${d.stepIndex + 1} · sim ${d.similarity.toFixed(3)}</div>`
         );
       })
       .on('mousemove', (event) => {
