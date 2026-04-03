@@ -29,5 +29,4 @@ jobs:
           tags: |
             isaaclb98/rhizome:latest
             isaaclb98/rhizome:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          no-cache-fallback: true
