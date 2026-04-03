@@ -8,7 +8,9 @@ const DEFAULT_PARAMS = {
   query: 'the tension between modernism and postmodernism',
   depth: 8,
   epsilon: 0.1,
-  top_k: 5,
+  top_k: 20,
+  temperature: 1.0,
+  max_same_article_consecutive: 2,
 };
 
 export default function App() {
@@ -123,6 +125,14 @@ export default function App() {
           <div className="flex items-center gap-1.5">
             <span>top_k</span>
             <span className="text-gray-300">{stats.top_k}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span>temp</span>
+            <span className="text-gray-300">{stats.temperature}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span>same-art</span>
+            <span className="text-gray-300">{stats.max_same_article_consecutive}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="text-orange-400">●</span>
