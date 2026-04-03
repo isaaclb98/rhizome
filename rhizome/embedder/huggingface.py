@@ -2,7 +2,7 @@
 
 import requests
 
-from rhizome.embedder.base import Embedder
+from rhizome.embedder.base import Embedder, EmbeddingError
 
 
 class HuggingFaceEmbedder(Embedder):
@@ -52,8 +52,3 @@ class HuggingFaceEmbedder(Embedder):
             Vector dimension. Defaults to 384 for all-MiniLM-L6-v2.
         """
         return 384  # all-MiniLM-L6-v2 outputs 384-dimensional vectors
-
-
-class EmbeddingError(Exception):
-    """Raised when embedding generation fails."""
-    pass
