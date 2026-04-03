@@ -11,7 +11,7 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: '../../visualizer/static',
+    outDir: '/app/visualizer/static',
     emptyOutDir: true,
   },
 });
