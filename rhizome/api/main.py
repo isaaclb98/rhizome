@@ -43,6 +43,17 @@ class TraverseRequest(BaseModel):
     top_k: int = Field(default=5, ge=1, le=20)
 
 
+class CandidateResponse(BaseModel):
+    """A top_k candidate considered at a traversal step."""
+
+    chunk_id: str
+    text: str
+    article_title: str
+    article_url: str
+    domain: str
+    similarity: float
+
+
 class TraversalStepResponse(BaseModel):
     """A single step in the traversal path response."""
 
@@ -54,6 +65,7 @@ class TraversalStepResponse(BaseModel):
     depth: int
     similarity: float
     forced_jump: bool
+    candidates: list[CandidateResponse]
 
 
 class TraversalStatsResponse(BaseModel):
@@ -215,6 +227,17 @@ def traverse(req: TraverseRequest):
                 depth=step.depth,
                 similarity=step.similarity,
                 forced_jump=step.forced_jump,
+                candidates=[
+                    CandidateResponse(
+                        chunk_id=c["payload"]["id"],
+                        text=c["payload"]["text"],
+                        article_title=c["payload"]["article_title"],
+                        article_url=c["payload"]["article_url"],
+                        domain=c["payload"].get("domain", "Unknown"),
+                        similarity=float(c["score"]),
+                    )
+                    for c in step.candidates
+                ],
             )
             for step in path
         ],
