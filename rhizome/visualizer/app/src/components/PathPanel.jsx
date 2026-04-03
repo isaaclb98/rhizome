@@ -22,11 +22,12 @@ function DomainBadge({ domain }) {
 function PathItem({ step, index, isSelected, onClick }) {
   const isForced = step.forced_jump;
   return (
-    <button
+    <div
       onClick={onClick}
-      className={`w-full text-left px-3 py-2.5 border-b border-bg-tertiary transition-colors ${
+      className={`w-full text-left px-3 py-2.5 border-b border-bg-tertiary transition-colors cursor-pointer ${
         isSelected ? 'bg-bg-tertiary border-l-2 border-l-blue-500' : 'hover:bg-bg-secondary'
       }`}
+      style={{ userSelect: 'text' }}
     >
       <div className="flex items-start gap-2">
         <span className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold mt-0.5 ${
@@ -34,22 +35,22 @@ function PathItem({ step, index, isSelected, onClick }) {
         }`}>
           {index + 1}
         </span>
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 select-text">
           <div className="flex items-center gap-1.5 flex-wrap mb-1">
-            <span className="text-sm font-medium text-gray-200 leading-tight">
+            <span className="text-sm font-medium text-gray-200 leading-tight select-text">
               {step.article_title}
             </span>
             <DomainBadge domain={step.domain} />
             {isForced && (
-              <span className="text-xs text-orange-400">forced jump</span>
+              <span className="text-xs text-orange-400 select-none">forced jump</span>
             )}
           </div>
-          <p className="text-xs text-gray-400 leading-relaxed">
+          <p className="text-xs text-gray-400 leading-relaxed select-text">
             {step.text}
           </p>
           {isSelected && (
             <div className="mt-2 flex items-center gap-3 text-xs text-gray-500">
-              <span>sim <span className="text-gray-400 font-mono">{step.similarity.toFixed(4)}</span></span>
+              <span>sim <span className="text-gray-400 font-mono select-text">{step.similarity.toFixed(4)}</span></span>
               <a
                 href={step.article_url}
                 target="_blank"
@@ -62,7 +63,7 @@ function PathItem({ step, index, isSelected, onClick }) {
           )}
         </div>
       </div>
-    </button>
+    </div>
   );
 }
 
