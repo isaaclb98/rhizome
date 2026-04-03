@@ -4,7 +4,9 @@
 #
 services:
   rhizome:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     depends_on:
       qdrant:
         condition: service_healthy
@@ -12,12 +14,14 @@ services:
       OPENAI_API_KEY: "${OPENAI_API_KEY:?OPENAI_API_KEY is required}"
       QDRANT_API_KEY: "${QDRANT_API_KEY:-}"
       QDRANT_URL: "http://qdrant:6333"
+      QDRANT_COLLECTION: "${QDRANT_COLLECTION:-modernity-v1}"
+      EMBEDDER_TYPE: "${EMBEDDER_TYPE:-openai}"
+      RHIZOME_STATIC_DIR: "/app/static"
     env_file:
       - path: .env
         required: false
-    volumes:
-      - ./config.yaml:/app/config.yaml:ro
-    entrypoint: ["rhizome"]
+    ports:
+      - "8000:8000"
     profiles:
       - dev
 

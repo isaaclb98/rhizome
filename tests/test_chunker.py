@@ -14,11 +14,13 @@ class TestChunker:
             article_title="Test Article",
             article_url="https://en.wikipedia.org/wiki/Test_Article",
             article_text="This is a short paragraph.\n\nThis is another paragraph.",
+            domain="Modernism",
         )
 
         assert len(chunks) == 2
         assert chunks[0].article_title == "Test Article"
         assert "short paragraph" in chunks[0].text
+        assert chunks[0].domain == "Modernism"
 
     def test_long_paragraph_split_at_sentence_boundary(self):
         """Paragraphs > max_chars are split at sentence boundaries."""
@@ -28,6 +30,7 @@ class TestChunker:
             article_title="Test",
             article_url="https://en.wikipedia.org/wiki/Test",
             article_text=text,
+            domain="Modernism",
         )
 
         # Each chunk should be a subset of sentences
@@ -41,14 +44,14 @@ class TestChunker:
 
         # Within same article: duplicate text is deduplicated
         chunks_same_article = chunker.chunk_article(
-            "Article A", "https://example.com/a", "Same text here. And then same text here."
+            "Article A", "https://example.com/a", "Same text here. And then same text here.", "Modernism"
         )
         # Both paragraphs have the same text, but within same article they deduplicate to 1 chunk
         # (this test checks deduplication within article works)
 
         # Same text across different articles: unique slug-based IDs
-        chunks_a = chunker.chunk_article("Article A", "https://example.com/a", "Unique text for A.")
-        chunks_b = chunker.chunk_article("Article B", "https://example.com/b", "Unique text for B.")
+        chunks_a = chunker.chunk_article("Article A", "https://example.com/a", "Unique text for A.", "Modernism")
+        chunks_b = chunker.chunk_article("Article B", "https://example.com/b", "Unique text for B.", "Modernism")
 
         # IDs should be unique slug-based IDs (case-preserved)
         assert chunks_a[0].id.startswith("Article-A-")
@@ -62,6 +65,7 @@ class TestChunker:
             article_title="Modernism and Postmodernism",
             article_url="https://en.wikipedia.org/wiki/Modernism_and_Postmodernism",
             article_text="A short paragraph.",
+            domain="Modernism",
         )
         # Chunk ID is slug-based, case-preserved: Modernism-and-Postmodernism-001
         assert chunks[0].id.startswith("Modernism-and-Postmodernism-")
@@ -74,6 +78,7 @@ class TestChunker:
             article_title="Test",
             article_url="https://example.com/test",
             article_text="Paragraph one.\n\n\nParagraph two.",
+            domain="Modernism",
         )
         assert len(chunks) == 2
         assert all(c.text.strip() for c in chunks)
@@ -91,6 +96,7 @@ class TestChunker:
             article_title="Modernism",
             article_url="https://en.wikipedia.org/wiki/Modernism",
             article_text=text,
+            domain="Modernism",
         )
         # The text should be truncated before "See also"
         full_text = " ".join(c.text for c in chunks)
@@ -108,6 +114,7 @@ class TestChunker:
                 "Short header text.\n\n"
                 "This is a much longer paragraph with actual content that should be retained in the output."
             ),
+            domain="Modernism",
         )
         # First paragraph is under 50 chars — should be skipped
         # Second paragraph is over 50 chars — should be retained

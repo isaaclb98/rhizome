@@ -14,6 +14,7 @@ class Chunk:
     text: str        # chunk text content
     article_title: str
     article_url: str
+    domain: str      # Wikipedia domain (Modernism, Postmodernism, Critical theory)
 
 
 _STOP_HEADERS = [
@@ -62,13 +63,20 @@ class Chunker:
         self.max_chars = max_chars
         self.min_chars = min_chars
 
-    def chunk_article(self, article_title: str, article_url: str, article_text: str) -> list[Chunk]:
+    def chunk_article(
+        self,
+        article_title: str,
+        article_url: str,
+        article_text: str,
+        domain: str,
+    ) -> list[Chunk]:
         """Split a single article into chunks.
 
         Args:
             article_title: Wikipedia article title.
             article_url: Full Wikipedia article URL.
             article_text: Raw article text (no markup).
+            domain: Wikipedia domain (Modernism, Postmodernism, Critical theory).
 
         Returns:
             List of Chunks with stable slug-based IDs.
@@ -102,6 +110,7 @@ class Chunker:
                     text=para,
                     article_title=article_title,
                     article_url=article_url,
+                    domain=domain,
                 ))
             else:
                 sub_chunks = self._split_at_sentences(para, self.max_chars)
@@ -118,6 +127,7 @@ class Chunker:
                             text=sub,
                             article_title=article_title,
                             article_url=article_url,
+                            domain=domain,
                         ))
 
         return chunks

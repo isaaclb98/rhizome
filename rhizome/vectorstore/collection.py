@@ -1,9 +1,22 @@
 """Qdrant collection management: create, upsert, delete."""
 
+import hashlib
+import uuid
+
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
 
 from rhizome.corpus.chunker import Chunk
+
+
+def _slug_to_uuid(slug: str) -> str:
+    """Convert a slug to a valid Qdrant point ID (UUID).
+
+    Qdrant requires unsigned integers or UUIDs for point IDs. Slug-based
+    chunk IDs like 'Symbolic-annihilation-001' are not valid — we hash
+    them to a deterministic UUID to use as the point ID instead.
+    """
+    return str(uuid.UUID(bytes=hashlib.md5(slug.encode()).digest()[:16]))
 
 
 class CollectionManager:
@@ -61,13 +74,14 @@ class CollectionManager:
 
         points = [
             PointStruct(
-                id=chunk.id,
+                id=_slug_to_uuid(chunk.id),
                 vector=vector,
                 payload={
                     "id": chunk.id,
                     "text": chunk.text,
                     "article_title": chunk.article_title,
                     "article_url": chunk.article_url,
+                    "domain": chunk.domain,
                 },
             )
             for chunk, vector in zip(chunks, vectors)
