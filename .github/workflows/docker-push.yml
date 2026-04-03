@@ -24,9 +24,10 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ${{ github.workspace }}
           push: true
           tags: |
             isaaclb98/rhizome:latest
             isaaclb98/rhizome:${{ github.sha }}
-          no-cache-fallback: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -6,7 +6,6 @@ __pycache__/
 .git/
 .gitignore
 .env
-.env.example
 *.egg-info/
 dist/
 build/
