@@ -106,6 +106,12 @@ class TraversalEngine:
                 # Reset consecutive counter on global jump — semantic reset
                 consecutive_same_article = 0
                 last_article_slug = None
+                # Clear article window on forced jump since we're escaping this neighborhood
+                article_window.clear()
+                # Record the jumped article so article_window is correct for next step
+                jumped_article_slug = extract_article_slug(selected["payload"]["id"])
+                if self.config.max_same_article_consecutive > 0:
+                    article_window.append(jumped_article_slug)
             else:
                 # Normal epsilon-greedy selection
                 explore_fired = random.random() < self.config.epsilon
@@ -116,7 +122,7 @@ class TraversalEngine:
                 else:
                     # Exploit: filter blocked articles
                     blocked_slugs = set(article_window) if self.config.max_same_article_consecutive > 0 else set()
-                    filtered = [c for c in candidates if extract_article_slug(c["id"]) not in blocked_slugs]
+                    filtered = [c for c in candidates if extract_article_slug(c["payload"]["id"]) not in blocked_slugs]
 
                     # If nothing left after blocking, or we've hit the consecutive limit,
                     # force a global jump to escape this neighborhood
@@ -128,12 +134,24 @@ class TraversalEngine:
                             top_k=50,
                             with_vector=False,
                         )
-                        remaining = [c for c in broad if c["id"] not in visited_ids]
+                        # Exclude both visited IDs and articles in the rolling window
+                        blocked_jump_slugs = set(article_window) if self.config.max_same_article_consecutive > 0 else set()
+                        remaining = [
+                            c for c in broad
+                            if c["payload"]["id"] not in visited_ids
+                            and extract_article_slug(c["payload"]["id"]) not in blocked_jump_slugs
+                        ]
                         if remaining:
                             selected = random.choice(remaining)
                             in_forced_jump = True
                             consecutive_same_article = 0
                             last_article_slug = None
+                            # Clear article window on forced jump since we're escaping this neighborhood
+                            article_window.clear()
+                            # Record the jumped article so article_window is correct for next step
+                            jumped_article_slug = extract_article_slug(selected["payload"]["id"])
+                            if self.config.max_same_article_consecutive > 0:
+                                article_window.append(jumped_article_slug)
                         else:
                             break
                     else:

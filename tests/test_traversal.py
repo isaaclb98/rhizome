@@ -216,56 +216,40 @@ class TestRollingArticleWindow:
     """Tests for article hard block via rolling window."""
 
     def test_article_window_blocks_third_repeat(self):
-        """window=2 blocks 3rd consecutive same article."""
-        # Three chunks all from "modernism" — third should be blocked
-        modernism = [
-            {
-                "id": "modernism-001",
-                "score": 0.9,
-                "payload": {
-                    "id": "modernism-001",
-                    "text": "Modernism is...",
-                    "article_title": "Modernism",
-                    "article_url": "https://en.wikipedia.org/wiki/Modernism",
-                    "domain": "Philosophy",
-                },
-                "vector": [0.1] * 384,
-            },
-            {
-                "id": "modernism-002",
-                "score": 0.85,
-                "payload": {
-                    "id": "modernism-002",
-                    "text": "Modernism continued...",
-                    "article_title": "Modernism",
-                    "article_url": "https://en.wikipedia.org/wiki/Modernism",
-                    "domain": "Philosophy",
-                },
-                "vector": [0.1] * 384,
-            },
-            {
-                "id": "modernism-003",
-                "score": 0.8,
-                "payload": {
-                    "id": "modernism-003",
-                    "text": "Modernism era...",
-                    "article_title": "Modernism",
-                    "article_url": "https://en.wikipedia.org/wiki/Modernism",
-                    "domain": "Philosophy",
-                },
-                "vector": [0.1] * 384,
-            },
+        """window=2: article window blocks a 3rd consecutive chunk from the same article."""
+        # The rolling window tracks recently picked article slugs. With window=2, after
+        # modernism-001 is picked (window=['modernism']), modernism-002 is blocked since
+        # 'modernism' is already in the window. The forced jump clears the window and
+        # picks critical-theory-001. With only 2 articles in the mock, the traversal ends
+        # early because the forced jump finds no further unvisited non-blocked candidates.
+        candidates = [
+            {"id": "modernism-001", "score": 0.9,
+             "payload": {"id": "modernism-001", "text": "Modernism is...", "article_title": "Modernism",
+                          "article_url": "https://en.wikipedia.org/wiki/Modernism", "domain": "Philosophy"},
+             "vector": [0.1] * 384},
+            {"id": "modernism-002", "score": 0.85,
+             "payload": {"id": "modernism-002", "text": "Modernism continued...", "article_title": "Modernism",
+                          "article_url": "https://en.wikipedia.org/wiki/Modernism", "domain": "Philosophy"},
+             "vector": [0.1] * 384},
+            {"id": "critical-theory-001", "score": 0.8,
+             "payload": {"id": "critical-theory-001", "text": "Critical theory...", "article_title": "Critical theory",
+                          "article_url": "https://en.wikipedia.org/wiki/Critical_theory", "domain": "Philosophy"},
+             "vector": [0.1] * 384},
         ]
         embedder = MockEmbedder()
-        vector_store = MockVectorStore(modernism)
-        # window=2 → after 2 modernism chunks, 3rd is blocked and forces global jump
-        config = TraversalConfig(depth=3, epsilon=0.0, max_same_article_consecutive=2, temperature=0.0)
+        vector_store = MockVectorStore(candidates)
+        config = TraversalConfig(depth=4, epsilon=0.0, max_same_article_consecutive=2, temperature=0.0)
         engine = TraversalEngine(embedder=embedder, vector_store=vector_store, config=config)
-        # With global jump fallback, the path won't be empty
         path = engine.traverse("modernism")
-        # The first two steps should be from modernism; the third step triggers a global jump
-        # (which may land on modernism again since it's the only article — so we check length > 0)
-        assert len(path) >= 2
+        # modernism-001 is picked first. modernism-002 is blocked by the article window.
+        # Forced jump clears the window and picks critical-theory-001.
+        # At step 2, critical-theory-001 is visited and modernism-002 is blocked, so the
+        # forced jump finds no valid landing and the traversal terminates.
+        assert len(path) == 2
+        assert path[0].chunk_id == "modernism-001"
+        assert path[0].forced_jump is False
+        assert path[1].chunk_id == "critical-theory-001"
+        assert path[1].forced_jump is False  # picked via softmax (filtered not empty), not forced
 
     def test_article_window_allows_different_after_block(self):
         """A, B, A sequence is allowed — B breaks the chain."""
