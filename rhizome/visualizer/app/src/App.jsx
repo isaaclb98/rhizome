@@ -80,7 +80,7 @@ export default function App() {
       )}
 
       {/* Main content: two-column layout */}
-      <div className="flex-1 min-h-0 grid grid-cols-[1fr_320px]">
+      <div className="flex-1 min-h-0 flex overflow-hidden">
         {/* Left: path text panel */}
         <div className="flex-1 min-h-0 overflow-hidden">
           <PathPanel
