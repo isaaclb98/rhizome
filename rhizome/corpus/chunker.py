@@ -17,6 +17,9 @@ class Chunk:
     domain: str      # Wikipedia domain (Modernism, Postmodernism, Critical theory)
 
 
+_HEADER_MARKUP_RE = re.compile(r'^=+\s*(.+?)\s*=+$')
+
+
 _STOP_HEADERS = [
     "See also",
     "References",
@@ -133,11 +136,21 @@ class Chunker:
         return chunks
 
     def _split_paragraphs(self, text: str) -> list[str]:
-        """Split text at paragraph boundaries (double newlines or single newlines)."""
+        """Split text at paragraph boundaries, skipping bare Wikipedia headers."""
         # Split on double newlines first (paragraph breaks)
         parts = re.split(r'\n\s*\n', text)
         result = []
         for part in parts:
+            part_stripped = part.strip()
+            # Skip paragraphs that are purely Wikipedia section headers
+            # (explaintext sometimes leaves bare markup like "=== Section Name ===").
+            # A bare header has no period after stripping markup — it's a title/caption,
+            # not prose, so it should not be embedded as a standalone chunk.
+            if _HEADER_MARKUP_RE.match(part_stripped):
+                header_text = _HEADER_MARKUP_RE.sub(r'\1', part_stripped)
+                if not header_text.strip() or '.' not in header_text:
+                    continue  # bare header, skip
+
             # Further split on single newlines if paragraphs are too long
             lines = part.split('\n')
             current = []
