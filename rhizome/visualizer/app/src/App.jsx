@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import Controls from './components/Controls.jsx';
 import Graph from './components/Graph.jsx';
 import Sidebar from './components/Sidebar.jsx';
+import Legend from './components/Legend.jsx';
 
 const DEFAULT_PARAMS = {
   query: 'the tension between modernism and postmodernism',
@@ -63,7 +64,7 @@ export default function App() {
       {/* Header */}
       <header className="flex-none border-b border-bg-tertiary px-6 py-4">
         <div className="flex items-center gap-3 mb-4">
-          <h1 className="text-xl font-semibold tracking-tight text-white">
+          <h1 className="text-2xl font-bold tracking-tight text-white">
             Rhizome
           </h1>
           <span className="text-xs text-gray-500 font-mono">
@@ -71,6 +72,9 @@ export default function App() {
           </span>
         </div>
         <Controls params={params} onTraverse={handleTraverse} isLoading={isLoading} />
+        <div className="mt-3">
+          <Legend />
+        </div>
       </header>
 
       {/* Error banner */}
