@@ -24,7 +24,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 RUN uv pip install --system fastapi uvicorn qdrant-client openai huggingface-hub
 
 # Copy built frontend (from Stage 1)
-COPY --from=frontend-builder /app/dist /app/static
+COPY --from=frontend-builder /app/visualizer/static /app/static
 
 # Set static files path for FastAPI SPA fallback
 ENV RHIZOME_STATIC_DIR=/app/static
