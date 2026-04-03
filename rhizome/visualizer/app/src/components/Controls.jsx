@@ -86,7 +86,7 @@ export default function Controls({ params, onTraverse, isLoading }) {
       <button
         type="submit"
         disabled={isLoading || !query.trim()}
-        className="px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-900/40 disabled:text-gray-600 text-white text-sm font-medium rounded transition-colors cursor-pointer"
+        className="px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-900/40 disabled:text-gray-600 text-white text-sm font-medium rounded transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
       >
         {isLoading ? 'Traversing...' : 'Traverse'}
       </button>
