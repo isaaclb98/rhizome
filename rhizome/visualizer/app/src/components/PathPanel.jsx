@@ -88,14 +88,14 @@ export default function PathPanel({ path, selectedChunkId, onSelectChunk }) {
 
   if (path.length === 0) {
     return (
-      <aside className="w-80 border-r border-bg-tertiary flex items-center justify-center text-gray-600 text-sm p-6 text-center">
+      <aside className="flex-1 border-r border-bg-tertiary flex items-center justify-center text-gray-600 text-sm p-6 text-center">
         Run a traversal to see the path
       </aside>
     );
   }
 
   return (
-    <aside className="w-80 border-r border-bg-tertiary flex flex-col overflow-hidden bg-bg-primary">
+    <aside className="flex-1 border-r border-bg-tertiary flex flex-col overflow-hidden bg-bg-primary">
       <div className="flex-none px-3 py-2 border-b border-bg-tertiary bg-bg-secondary">
         <div className="text-xs text-gray-400 font-medium">
           Path — {path.length} chunks
