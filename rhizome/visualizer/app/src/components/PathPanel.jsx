@@ -79,8 +79,8 @@ export default function PathPanel({ path, selectedChunkId, onSelectChunk }) {
 
   if (path.length === 0) {
     return (
-      <aside className="flex-1 min-h-0 border-r border-bg-tertiary flex items-center justify-center text-gray-600 text-sm p-6 text-center bg-bg-primary">
-        Run a traversal to see the path
+      <aside className="h-full border-r border-bg-tertiary flex items-center justify-center bg-bg-primary">
+        <span className="text-gray-600 text-sm text-center px-6">Run a traversal to see the path</span>
       </aside>
     );
   }
