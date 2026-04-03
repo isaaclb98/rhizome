@@ -23,7 +23,7 @@ class MockVectorStore:
     def __init__(self, results: list[dict] | None = None):
         self._results = results or []
 
-    def search_excluding(self, query_vector, exclude_ids, top_k):
+    def search_excluding(self, query_vector, exclude_ids, top_k, query_filter=None, with_vector=True):
         return [r for r in self._results if r["id"] not in exclude_ids]
 
 
@@ -32,6 +32,7 @@ class TestTraversalEngine:
 
     def test_traverse_returns_path(self):
         """traverse() returns a non-empty path of TraversalSteps."""
+        mock_vector = [0.1] * 384
         mock_results = [
             {
                 "id": "modernism-001",
@@ -42,6 +43,7 @@ class TestTraversalEngine:
                     "article_title": "Modernism",
                     "article_url": "https://en.wikipedia.org/wiki/Modernism",
                 },
+                "vector": mock_vector,
             },
             {
                 "id": "postmodernism-001",
@@ -52,6 +54,7 @@ class TestTraversalEngine:
                     "article_title": "Postmodernism",
                     "article_url": "https://en.wikipedia.org/wiki/Postmodernism",
                 },
+                "vector": mock_vector,
             },
         ]
 
@@ -79,6 +82,7 @@ class TestTraversalEngine:
                     "article_title": "Article A",
                     "article_url": "https://example.com/a",
                 },
+                "vector": [0.1] * 384,
             },
         ]
 

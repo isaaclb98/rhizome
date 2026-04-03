@@ -97,3 +97,20 @@ class TestCollectionManager:
 
         mgr = CollectionManager(url="http://localhost:6333")
         assert mgr.collection_exists("nonexistent-col") is False
+
+    @patch("rhizome.vectorstore.collection.QdrantClient")
+    def test_delete_chunks_by_article_uses_delete_filter(self, mock_qdrant_cls):
+        """delete_chunks_by_article uses delete-by-filter (single API call)."""
+        mock_client = MagicMock()
+        mock_qdrant_cls.return_value = mock_client
+
+        mgr = CollectionManager(url="http://localhost:6333")
+        mgr.delete_chunks_by_article("test-col", "Modernism")
+
+        # Should use delete with a Filter selector, not scroll+delete
+        mock_client.delete.assert_called_once()
+        call_kwargs = mock_client.delete.call_args[1]
+        # points_selector should be a Filter, not a PointIdsList
+        assert hasattr(call_kwargs["points_selector"], "must")
+        # No scroll should have been called
+        mock_client.scroll.assert_not_called()
