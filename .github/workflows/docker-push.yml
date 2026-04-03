@@ -21,7 +21,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push with layer caching
+      - name: Build and push
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -29,5 +29,5 @@ jobs:
           tags: |
             isaaclb98/rhizome:latest
             isaaclb98/rhizome:${{ github.sha }}
-          cache-from: type=registry,ref=isaaclb98/rhizome:latest
-          cache-to: type=inline
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
