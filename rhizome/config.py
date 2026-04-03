@@ -43,11 +43,15 @@ class RhizomeConfig(BaseSettings):
         default="http://localhost:6333",
         alias="QDRANT_URL",
     )
-    qdrant_collection: str = Field(alias="QDRANT_COLLECTION")
+    qdrant_collection: str = Field(
+        default="modernity-v1",
+        alias="QDRANT_COLLECTION",
+    )
     qdrant_api_key: str | None = Field(default=None, alias="QDRANT_API_KEY")
 
     # Embedder
     embedder_type: Literal["openai", "huggingface"] = Field(
+        default="openai",
         alias="EMBEDDER_TYPE",
     )
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
@@ -64,6 +68,7 @@ class RhizomeConfig(BaseSettings):
     )
     default_depth: int = Field(default=8, alias="DEFAULT_DEPTH")
     epsilon: float = Field(default=0.1, alias="EPSILON")
+    top_k: int = Field(default=5, alias="TOP_K")
 
     # ── Validators ──────────────────────────────────────────────────────────────
 
