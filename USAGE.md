@@ -60,20 +60,26 @@ pip install -e . --break-system-packages
 python3.14 -m venv .venv && source .venv/bin/activate && pip install -e .
 ```
 
-### 3. Qdrant (already configured)
+### 3. Qdrant
 
-The `config.yaml` points at a remote Qdrant instance (`https://qdrant.aizaku.ca`). No Docker or local setup needed. If you want to run Qdrant locally instead:
+Set `QDRANT_URL` in your `.env`. Defaults to `http://localhost:6333` (no key needed for local):
+
+```env
+QDRANT_URL=http://localhost:6333
+QDRANT_COLLECTION=modernity-v1
+```
+
+Or use a remote Qdrant instance (e.g. Qdrant Cloud):
+
+```env
+QDRANT_URL=https://your-qdrant-cloud.example.com:6333
+QDRANT_API_KEY=your_qdrant_key
+```
+
+Start a local Qdrant with Docker:
 
 ```bash
 docker run -p 6333:6333 -p 6334:6334 qdrant/qdrant
-```
-
-Then update `config.yaml`:
-
-```yaml
-vectorstore:
-  url: "http://localhost:6333"
-  api_key: null  # no key needed for local
 ```
 
 ---
@@ -98,7 +104,7 @@ This takes a few minutes for 500 articles (OpenAI rate limits are the bottleneck
 3. Articles are chunked at paragraph boundaries (paragraphs over 500 chars are split at sentence boundaries)
 4. Bibliography and reference sections are stripped before chunking
 5. Each chunk is embedded with OpenAI `text-embedding-3-small` (1536 dimensions)
-6. Chunks are upserted to Qdrant in batches of 50
+6. Chunks are upserted to Qdrant in batches of 100
 
 **What to expect:**
 - 500 articles → ~2,500 chunks → ~2,500 OpenAI embedding calls
@@ -191,28 +197,23 @@ Ingest is sequential. For large corpora, embedding is the bottleneck. A 500-arti
 
 ## Configuration reference
 
-All settings live in `config.yaml`:
+All settings are environment variables. Copy `.env.example` to `.env` to get started:
 
-```yaml
-openai:
-  api_key: "${OPENAI_API_KEY}"   # env var or literal key
-  model: "text-embedding-3-small" # 1536-dim embeddings
+```env
+# Required
+OPENAI_API_KEY=sk-...          # for OpenAI embedder
+QDRANT_URL=http://localhost:6333
+QDRANT_COLLECTION=modernity-v1
 
-vectorstore:
-  url: "https://qdrant.aizaku.ca" # remote Qdrant
-  api_key: "${QDRANT_API_KEY}"     # cloud Qdrant key
-  collection: "modernity-v1"       # collection name
-  vector_size: 1536                # must match embedding model
-
-corpus:
-  domains:
-    - "Modernism"       # Wikipedia categories to ingest
-    - "Postmodernism"
-  max_articles: 500      # per domain
-  depth: 1               # PetScan category tree depth (1 = top-level only)
-
-traversal:
-  depth: 8               # number of hops per traversal
-  epsilon: 0.1           # exploration probability
-  top_k: 5               # candidates per step
+# Optional
+EMBEDDER_TYPE=openai           # openai or huggingface
+HF_API_TOKEN=                  # for HuggingFace Inference API
+HF_MODEL=sentence-transformers/all-MiniLM-L6-v2
+QDRANT_API_KEY=                # for Qdrant Cloud
+WIKIPEDIA_DOMAINS=Modernism,Postmodernism,Critical theory
+DEFAULT_DEPTH=8
+EPSILON=0.1
+TOP_K=5
 ```
+
+See `.env.example` for the full list.
