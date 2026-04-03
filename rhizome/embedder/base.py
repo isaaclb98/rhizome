@@ -4,6 +4,11 @@ from abc import ABC, abstractmethod
 from typing import Protocol
 
 
+class EmbeddingError(Exception):
+    """Raised when embedding generation fails."""
+    pass
+
+
 class Embedder(Protocol):
     """Interface for embedding providers.
 
