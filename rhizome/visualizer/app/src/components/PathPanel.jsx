@@ -25,52 +25,43 @@ function PathItem({ step, index, isSelected, onClick }) {
     <button
       onClick={onClick}
       className={`w-full text-left px-3 py-2.5 border-b border-bg-tertiary transition-colors ${
-        isSelected
-          ? 'bg-bg-tertiary'
-          : 'hover:bg-bg-secondary'
+        isSelected ? 'bg-bg-tertiary border-l-2 border-l-blue-500' : 'hover:bg-bg-secondary'
       }`}
     >
-      <div className="flex items-start gap-2 mb-1">
-        <span className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
-          isForced ? 'bg-orange-900/60 text-orange-400' : 'bg-bg-tertiary text-gray-400'
+      <div className="flex items-start gap-2">
+        <span className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold mt-0.5 ${
+          isForced ? 'bg-orange-900/60 text-orange-400' : isSelected ? 'bg-blue-600 text-white' : 'bg-bg-tertiary text-gray-400'
         }`}>
           {index + 1}
         </span>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-sm font-medium text-gray-200 leading-tight truncate">
+          <div className="flex items-center gap-1.5 flex-wrap mb-1">
+            <span className="text-sm font-medium text-gray-200 leading-tight">
               {step.article_title}
             </span>
             <DomainBadge domain={step.domain} />
+            {isForced && (
+              <span className="text-xs text-orange-400">forced jump</span>
+            )}
           </div>
-          {isForced && (
-            <span className="inline-block mt-0.5 text-xs text-orange-400">
-              forced jump · sim {step.similarity.toFixed(3)}
-            </span>
+          <p className="text-xs text-gray-400 leading-relaxed">
+            {step.text}
+          </p>
+          {isSelected && (
+            <div className="mt-2 flex items-center gap-3 text-xs text-gray-500">
+              <span>sim <span className="text-gray-400 font-mono">{step.similarity.toFixed(4)}</span></span>
+              <a
+                href={step.article_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-gray-300 underline"
+              >
+                Wikipedia ↗
+              </a>
+            </div>
           )}
         </div>
       </div>
-      <p className="text-xs text-gray-500 leading-relaxed pl-7 line-clamp-2">
-        {step.text}
-      </p>
-      {isSelected && (
-        <div className="mt-2 pl-7">
-          <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">
-            {step.text}
-          </p>
-          <div className="mt-2 flex items-center gap-3 text-xs text-gray-500">
-            <span>sim <span className="text-gray-400 font-mono">{step.similarity.toFixed(4)}</span></span>
-            <a
-              href={step.article_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-gray-300 underline"
-            >
-              Wikipedia ↗
-            </a>
-          </div>
-        </div>
-      )}
     </button>
   );
 }
