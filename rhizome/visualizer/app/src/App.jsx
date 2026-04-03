@@ -82,7 +82,7 @@ export default function App() {
       {/* Main content: two-column layout */}
       <div className="flex-1 min-h-0 grid grid-cols-[1fr_320px]">
         {/* Left: path text panel */}
-        <div className="flex-1 min-h-0">
+        <div className="flex-1 min-h-0 overflow-hidden">
           <PathPanel
             path={path}
             selectedChunkId={selectedChunkId}
@@ -99,8 +99,9 @@ export default function App() {
               onNodeClick={handleNodeClick}
             />
           ) : (
-            <div className="flex-1 flex items-center justify-center text-gray-600 text-xs p-4 text-center">
-              Graph appears here after traversal
+            <div className="flex-1 flex flex-col items-center justify-center text-gray-600 text-xs p-4 text-center gap-2">
+              <span>Graph appears here</span>
+              <span>after traversal</span>
             </div>
           )}
         </div>
