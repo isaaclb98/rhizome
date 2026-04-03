@@ -99,9 +99,11 @@ export default function App() {
               onNodeClick={handleNodeClick}
             />
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-gray-600 text-xs p-4 text-center gap-2">
-              <span>Graph appears here</span>
-              <span>after traversal</span>
+            <div className="relative flex-1">
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-600 text-xs text-center gap-2">
+                <span>Graph appears here</span>
+                <span>after traversal</span>
+              </div>
             </div>
           )}
         </div>

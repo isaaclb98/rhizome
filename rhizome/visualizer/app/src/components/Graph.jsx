@@ -75,16 +75,14 @@ export default function Graph({ path, selectedChunkId, onNodeClick }) {
 
     const g = svg.append('g').attr('clip-path', `url(#${clipId})`);
 
-    const padLeft = 24, padRight = 24, padTop = 16, padBottom = 16;
-    const usableWidth = width - padLeft - padRight;
+    const padTop = 16, padBottom = 16;
     const usableHeight = height - padTop - padBottom;
 
-    // Position nodes in graph coordinate space
+    // Position nodes: vertical line at x = 0 (center), evenly spaced vertically
     const nodeById = new Map();
     nodes.forEach((n, i) => {
+      const x = 0;
       const y = padTop + (i / Math.max(nodes.length - 1, 1)) * usableHeight;
-      const lane = i % 3;
-      const x = padLeft + usableWidth / 2 + (lane - 1) * usableWidth * 0.22;
       nodeById.set(n.id, { ...n, x, y });
     });
 
