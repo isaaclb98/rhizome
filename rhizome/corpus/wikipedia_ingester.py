@@ -59,13 +59,11 @@ class WikipediaIngester:
     def __init__(
         self,
         domains: str | list[str],
-        max_articles: int = 500,
         seed_titles: list[str] | None = None,
         chunker: Chunker | None = None,
         depth: int = 1,
     ):
         self.domains = [domains] if isinstance(domains, str) else domains
-        self.max_articles = max_articles
         self.seed_titles = seed_titles or []
         self.chunker = chunker or Chunker()
         self.depth = depth
@@ -82,7 +80,7 @@ class WikipediaIngester:
                           PetScan is unreachable.
         """
         article_domains = self._discover_articles()
-        for title, domain in list(article_domains.items())[: self.max_articles]:
+        for title, domain in article_domains.items():
             try:
                 article_text = self._fetch_article(title)
                 if article_text is None:

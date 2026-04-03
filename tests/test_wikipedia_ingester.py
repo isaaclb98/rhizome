@@ -13,7 +13,6 @@ class TestWikipediaIngester:
         """Seed titles bypass PetScan discovery and are tagged with first domain."""
         ingester = WikipediaIngester(
             domains=["Modernism", "Postmodernism"],
-            max_articles=10,
             seed_titles=["Article A", "Article B"],
         )
         # _discover_articles returns {title: domain} for seed titles
@@ -39,7 +38,7 @@ class TestWikipediaIngester:
         }
         mock_get.return_value = mock_response
 
-        ingester = WikipediaIngester(domains=["Philosophy"], max_articles=50)
+        ingester = WikipediaIngester(domains=["Philosophy"])
         article_map = ingester._discover_articles()
 
         assert "Modernism" in article_map
@@ -144,7 +143,6 @@ class TestWikipediaIngester:
 
         ingester = WikipediaIngester(
             domains=["Modernism"],
-            max_articles=10,
             seed_titles=["Modernism"],
             chunker=Chunker(min_chars=0),
         )
@@ -182,7 +180,6 @@ class TestWikipediaIngester:
 
         ingester = WikipediaIngester(
             domains=["Modernism"],
-            max_articles=10,
             seed_titles=["Modernism", "NonexistentArticle"],
             chunker=Chunker(min_chars=0),
         )

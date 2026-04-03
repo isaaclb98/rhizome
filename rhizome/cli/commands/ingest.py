@@ -18,25 +18,19 @@ BATCH_SIZE = 100
     multiple=True,
     help="Wikipedia domain(s) to ingest. Can be specified multiple times (overrides config)",
 )
-@click.option(
-    "--max-articles",
-    type=int,
-    help="Maximum articles to ingest (overrides config)",
-)
-def ingest(domains: tuple[str, ...] | None, max_articles: int | None):
+def ingest(domains: tuple[str, ...] | None):
     """Ingest Wikipedia articles and store chunks in Qdrant.
 
     Reads configuration from environment variables. Run this before `rhizome traverse`.
 
     Example:
-        rhizome ingest --domain Modernism --domain Postmodernism --max-articles 500
+        rhizome ingest --domain Modernism --domain Postmodernism
     """
     cfg = get_config()
 
     domain_list = list(domains) if domains else cfg.wikipedia_domains
-    max_articles = max_articles or 500
 
-    click.echo(f"Starting ingestion: domains={domain_list}, max_articles={max_articles}")
+    click.echo(f"Starting ingestion: domains={domain_list}")
 
     # Set up components
     embedder = get_embedder(
@@ -62,12 +56,11 @@ def ingest(domains: tuple[str, ...] | None, max_articles: int | None):
     # Discover articles first (to get actual count for progress bar)
     ingester = WikipediaIngester(
         domains=domain_list,
-        max_articles=max_articles,
         depth=1,
         chunker=Chunker(),
     )
     discovered_titles = ingester._discover_articles()
-    actual_article_count = min(len(discovered_titles), max_articles)
+    article_count = len(discovered_titles)
 
     total_chunks = 0
     total_articles = 0
@@ -77,7 +70,7 @@ def ingest(domains: tuple[str, ...] | None, max_articles: int | None):
 
     try:
         with click.progressbar(
-            length=actual_article_count,
+            length=article_count,
             label="Ingesting articles",
             show_eta=True,
             show_percent=True,
