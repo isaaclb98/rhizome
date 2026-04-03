@@ -81,6 +81,7 @@ class CollectionManager:
                     "text": chunk.text,
                     "article_title": chunk.article_title,
                     "article_url": chunk.article_url,
+                    "domain": chunk.domain,
                 },
             )
             for chunk, vector in zip(chunks, vectors)

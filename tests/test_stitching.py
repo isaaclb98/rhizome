@@ -37,7 +37,10 @@ class TestFormatter:
                 text="Modernism is a philosophical movement.",
                 article_title="Modernism",
                 article_url="https://en.wikipedia.org/wiki/Modernism",
+                domain="Modernism",
                 depth=0,
+                similarity=0.95,
+                forced_jump=False,
             )
         ]
         result = stitch_to_markdown("Modernism", path)
@@ -55,14 +58,20 @@ class TestFormatter:
                 text="First paragraph.",
                 article_title="Modernism",
                 article_url="https://en.wikipedia.org/wiki/Modernism",
+                domain="Modernism",
                 depth=0,
+                similarity=0.95,
+                forced_jump=False,
             ),
             TraversalStep(
                 chunk_id="postmodernism-001",
                 text="Second paragraph.",
                 article_title="Postmodernism",
                 article_url="https://en.wikipedia.org/wiki/Postmodernism",
+                domain="Postmodernism",
                 depth=1,
+                similarity=0.88,
+                forced_jump=False,
             ),
         ]
         result = stitch_to_markdown("Concept", path)
@@ -81,7 +90,10 @@ class TestFormatter:
                 text="Text.",
                 article_title="T",
                 article_url="https://example.com/t",
+                domain="Modernism",
                 depth=0,
+                similarity=0.95,
+                forced_jump=False,
             )
         ]
         result = stitch_to_markdown("Concept", path)
