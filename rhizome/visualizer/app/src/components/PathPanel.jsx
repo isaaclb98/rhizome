@@ -20,7 +20,6 @@ function DomainBadge({ domain }) {
 }
 
 function PathItem({ step, index, isSelected, onClick }) {
-  const isForced = step.forced_jump;
   return (
     <div
       onClick={onClick}
@@ -31,7 +30,7 @@ function PathItem({ step, index, isSelected, onClick }) {
     >
       <div className="flex items-start gap-2">
         <span className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold mt-0.5 ${
-          isForced ? 'bg-orange-900/60 text-orange-400' : isSelected ? 'bg-blue-600 text-white' : 'bg-bg-tertiary text-gray-400'
+          isSelected ? 'bg-blue-600 text-white' : 'bg-bg-tertiary text-gray-400'
         }`}>
           {index + 1}
         </span>
@@ -41,9 +40,6 @@ function PathItem({ step, index, isSelected, onClick }) {
               {step.article_title}
             </span>
             <DomainBadge domain={step.domain} />
-            {isForced && (
-              <span className="text-xs text-orange-400 select-none">forced jump</span>
-            )}
           </div>
           <p className="text-xs text-gray-400 leading-relaxed select-text">
             {step.text}
