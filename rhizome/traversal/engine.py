@@ -16,7 +16,12 @@ class TraversalStep:
     text: str
     article_title: str
     article_url: str
+    domain: str
     depth: int
+    similarity: float
+    forced_jump: bool
+    # All top_k candidates considered at this step (selected is first)
+    candidates: list[dict]
 
 
 class TraversalEngine:
@@ -104,14 +109,18 @@ class TraversalEngine:
                 else:
                     consecutive_fallback = 0
 
-            # Build the step
+            # Build the step — include all candidates so the UI can draw kNN edges
             payload = selected["payload"]
             step = TraversalStep(
                 chunk_id=payload["id"],
                 text=payload["text"],
                 article_title=payload["article_title"],
                 article_url=payload["article_url"],
+                domain=payload.get("domain", "Unknown"),
                 depth=depth,
+                similarity=float(selected["score"]),
+                forced_jump=in_forced_jump,
+                candidates=candidates,
             )
             path.append(step)
             visited_ids.add(payload["id"])
