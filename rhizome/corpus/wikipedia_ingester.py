@@ -74,14 +74,15 @@ class WikipediaIngester:
         """Fetch articles and yield all chunks.
 
         Yields:
-            Chunk objects for each article paragraph.
+            Chunk objects for each article paragraph. Each chunk is tagged
+            with the domain it was discovered under.
 
         Raises:
             IngesterError: If the Wikipedia API lookup fails or
                           PetScan is unreachable.
         """
-        titles = self._discover_articles()
-        for title in titles[: self.max_articles]:
+        article_domains = self._discover_articles()
+        for title, domain in list(article_domains.items())[: self.max_articles]:
             try:
                 article_text = self._fetch_article(title)
                 if article_text is None:
@@ -91,6 +92,7 @@ class WikipediaIngester:
                     article_title=title,
                     article_url=f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}",
                     article_text=article_text,
+                    domain=domain,
                 )
                 for chunk in chunks:
                     yield chunk
@@ -98,33 +100,47 @@ class WikipediaIngester:
                 print(f"Warning: failed to fetch '{title}': {e}", file=sys.stderr)
                 continue
 
-    def _discover_articles(self) -> list[str]:
+    def _discover_articles(self) -> dict[str, str]:
         """Discover article titles via PetScan category membership.
 
-        Uses seed list if provided, otherwise queries PetScan with the
-        configured domains and returns the union of all matching articles.
+        Uses seed list if provided (returns each title tagged with the first domain),
+        otherwise queries PetScan for each domain separately and tracks which domain
+        each article was discovered under. If an article appears in multiple domains,
+        it is assigned to the first domain that returned it.
+
+        Returns:
+            Dict mapping article title to domain name.
         """
         if self.seed_titles:
-            return self.seed_titles
+            first_domain = self.domains[0] if self.domains else "Unknown"
+            return {title: first_domain for title in self.seed_titles}
 
-        categories_str = "\r\n".join(self.domains)
-        params = {
-            "language": "en",
-            "project": "wikipedia",
-            "depth": self.depth,
-            "categories": categories_str,
-            "combination": "union",
-            "format": "json",
-            "doit": 1,
-        }
+        article_domains: dict[str, str] = {}
 
-        response = _http_with_retry(PETSCAN_URL, params=params)
-        if response.status_code != 200:
-            raise IngesterError(f"PetScan API error: {response.status_code} {response.text}")
+        for domain in self.domains:
+            params = {
+                "language": "en",
+                "project": "wikipedia",
+                "depth": self.depth,
+                "categories": domain,
+                "combination": "union",
+                "format": "json",
+                "doit": 1,
+            }
 
-        data = response.json()
-        articles = data.get("*", [{}])[0].get("a", {}).get("*", [])
-        return list({article["title"].replace("_", " ") for article in articles})
+            response = _http_with_retry(PETSCAN_URL, params=params)
+            if response.status_code != 200:
+                raise IngesterError(f"PetScan API error: {response.status_code} {response.text}")
+
+            data = response.json()
+            articles = data.get("*", [{}])[0].get("a", {}).get("*", [])
+            for article in articles:
+                title = article["title"].replace("_", " ")
+                # Assign to first domain that returns this article
+                if title not in article_domains:
+                    article_domains[title] = domain
+
+        return article_domains
 
     def _fetch_article(self, title: str) -> Optional[str]:
         """Fetch article text from the Wikipedia API.

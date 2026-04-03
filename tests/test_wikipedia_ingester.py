@@ -10,19 +10,19 @@ class TestWikipediaIngester:
     """Tests for WikipediaIngester."""
 
     def test_ingest_with_seed_titles(self):
-        """Seed titles bypass PetScan discovery."""
+        """Seed titles bypass PetScan discovery and are tagged with first domain."""
         ingester = WikipediaIngester(
-            domains=["Modernism"],
+            domains=["Modernism", "Postmodernism"],
             max_articles=10,
             seed_titles=["Article A", "Article B"],
         )
-        # If seed_titles are provided, _discover_articles returns them directly
-        titles = ingester._discover_articles()
-        assert titles == ["Article A", "Article B"]
+        # _discover_articles returns {title: domain} for seed titles
+        result = ingester._discover_articles()
+        assert result == {"Article A": "Modernism", "Article B": "Modernism"}
 
     @patch("rhizome.corpus.wikipedia_ingester.requests.get")
     def test_discover_articles_success(self, mock_get):
-        """_discover_articles parses PetScan JSON correctly."""
+        """_discover_articles parses PetScan JSON correctly and maps to domain."""
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
@@ -40,12 +40,12 @@ class TestWikipediaIngester:
         mock_get.return_value = mock_response
 
         ingester = WikipediaIngester(domains=["Philosophy"], max_articles=50)
-        titles = ingester._discover_articles()
+        article_map = ingester._discover_articles()
 
-        assert "Modernism" in titles
-        assert "Postmodernism" in titles
-        # Deduplication
-        assert len(titles) == len(set(titles))
+        assert "Modernism" in article_map
+        assert "Postmodernism" in article_map
+        assert article_map["Modernism"] == "Philosophy"
+        assert article_map["Postmodernism"] == "Philosophy"
 
     @patch("rhizome.corpus.wikipedia_ingester.requests.get")
     def test_discover_articles_api_error(self, mock_get):
