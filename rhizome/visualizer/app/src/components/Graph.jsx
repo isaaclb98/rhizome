@@ -193,12 +193,13 @@ export default function Graph({ path, selectedChunkId, onNodeClick }) {
     const gW = maxX - minX || 1;
     const gH = maxY - minY || 1;
 
-    // Scale to fit panel, centered — center the graph's center at the panel center
+    // Scale to fit panel, centered — center the visual mass (mean of node positions) at the panel center
     scale = Math.min(width / gW, height / gH, 1.5);
-    const centerX = (minX + maxX) / 2;
-    const centerY = (minY + maxY) / 2;
-    panX = width / 2 - centerX * scale;
-    panY = height / 2 - centerY * scale;
+    // Use mean x of all nodes for better centering (bbox center is biased when nodes are unevenly distributed)
+    const meanX = xs.reduce((a, b) => a + b, 0) / xs.length;
+    const meanY = ys.reduce((a, b) => a + b, 0) / ys.length;
+    panX = width / 2 - meanX * scale;
+    panY = height / 2 - meanY * scale;
     applyTransform();
 
     // Native wheel zoom
