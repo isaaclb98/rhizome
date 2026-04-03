@@ -6,7 +6,7 @@ WORKDIR /app
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 # Copy source and config
-COPY pyproject.toml uv.lock* README.md config.yaml /app/
+COPY pyproject.toml uv.lock* README.md /app/
 COPY rhizome/ /app/rhizome/
 
 # Install dependencies (the project itself is mounted/copied at runtime)

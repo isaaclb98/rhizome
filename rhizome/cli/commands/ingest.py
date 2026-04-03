@@ -1,24 +1,17 @@
 """Ingest Wikipedia articles and store chunks in Qdrant."""
 
-import os
-import yaml
 import click
 
+from rhizome.config import get_config
 from rhizome.corpus.wikipedia_ingester import WikipediaIngester, IngesterError
 from rhizome.corpus.chunker import Chunker
-from rhizome.embedder.openai import OpenAIEmbedder
+from rhizome.embedder.factory import get_embedder
 from rhizome.vectorstore.collection import CollectionManager
 
-BATCH_SIZE = 10
+BATCH_SIZE = 100
 
 
 @click.command()
-@click.option(
-    "--config",
-    default="config.yaml",
-    type=click.Path(exists=True),
-    help="Path to config.yaml",
-)
 @click.option(
     "--domain",
     "domains",
@@ -30,75 +23,47 @@ BATCH_SIZE = 10
     type=int,
     help="Maximum articles to ingest (overrides config)",
 )
-def ingest(config: str, domains: tuple[str, ...] | None, max_articles: int | None):
+def ingest(domains: tuple[str, ...] | None, max_articles: int | None):
     """Ingest Wikipedia articles and store chunks in Qdrant.
 
-    Reads configuration from config.yaml. Run this before `rhizome traverse`.
+    Reads configuration from environment variables. Run this before `rhizome traverse`.
 
     Example:
         rhizome ingest --domain Modernism --domain Postmodernism --max-articles 500
     """
-    # Load config
-    with open(config) as f:
-        cfg = yaml.safe_load(f)
+    cfg = get_config()
 
-    traversal_cfg = cfg.get("traversal", {})
-    corpus_cfg = cfg.get("corpus", {})
-    openai_cfg = cfg.get("openai", {})
-    vectorstore_cfg = cfg.get("vectorstore", {})
-
-    domain_cfg = corpus_cfg.get("domains", ["Modernism"])
-    domain_list = list(domains) if domains else (domain_cfg if isinstance(domain_cfg, list) else [domain_cfg])
-    max_articles = max_articles or corpus_cfg.get("max_articles", 500)
-    depth = corpus_cfg.get("depth", 1)
-    collection_name = vectorstore_cfg.get("collection", "modernity-v1")
-    vector_size = vectorstore_cfg.get("vector_size", 1536)
-
-    # Resolve Qdrant URL and API key (env vars override config)
-    qdrant_url = os.environ.get("QDRANT_URL") or vectorstore_cfg.get("url", "http://localhost:6333")
-    qdrant_api_key = os.environ.get("QDRANT_API_KEY")
-    if qdrant_api_key is None:
-        configured_key = vectorstore_cfg.get("api_key")
-        if configured_key is not None and configured_key.startswith("${"):
-            env_var = configured_key[2:-1]
-            qdrant_api_key = os.environ.get(env_var)
-        else:
-            qdrant_api_key = configured_key
-
-    # Resolve OpenAI API token
-    api_token = os.environ.get("OPENAI_API_KEY")
-    if api_token is None:
-        api_token = openai_cfg.get("api_key")
-    if api_token is not None and api_token.startswith("${"):
-        env_var = api_token[2:-1]
-        api_token = os.environ.get(env_var)
-
-    if not api_token:
-        click.echo("Error: OPENAI_API_KEY environment variable is not set.", err=True)
-        raise click.Abort()
+    domain_list = list(domains) if domains else cfg.wikipedia_domains
+    max_articles = max_articles or 500
 
     click.echo(f"Starting ingestion: domains={domain_list}, max_articles={max_articles}")
 
     # Set up components
-    embedder = OpenAIEmbedder(api_key=api_token, model=openai_cfg.get("model", "text-embedding-3-small"))
-    collection_mgr = CollectionManager(url=qdrant_url, api_key=qdrant_api_key)
+    embedder = get_embedder(
+        embedder_type=cfg.embedder_type,
+        openai_api_key=cfg.openai_api_key,
+        hf_api_token=cfg.hf_api_token,
+        hf_model=cfg.hf_model,
+    )
+    collection_mgr = CollectionManager(url=cfg.qdrant_url, api_key=cfg.qdrant_api_key)
 
     # Ensure collection exists
-    if not collection_mgr.collection_exists(collection_name):
-        click.echo(f"Creating collection: {collection_name} (vector_size={vector_size})")
+    vector_size = embedder.vector_size()
+    if not collection_mgr.collection_exists(cfg.qdrant_collection):
+        click.echo(f"Creating collection: {cfg.qdrant_collection} (vector_size={vector_size})")
         collection_mgr.create_collection(
-            collection_name=collection_name,
+            collection_name=cfg.qdrant_collection,
             vector_size=vector_size,
             recreate=False,
         )
     else:
-        click.echo(f"Using existing collection: {collection_name}")
+        click.echo(f"Using existing collection: {cfg.qdrant_collection}")
 
     # Discover articles first (to get actual count for progress bar)
     ingester = WikipediaIngester(
         domains=domain_list,
         max_articles=max_articles,
-        depth=depth,
+        depth=1,
         chunker=Chunker(),
     )
     discovered_titles = ingester._discover_articles()
@@ -108,7 +73,7 @@ def ingest(config: str, domains: tuple[str, ...] | None, max_articles: int | Non
     total_articles = 0
     seen_titles: set[str] = set()
     batch_chunks = []
-    batch_vectors = []
+    batch_texts = []
 
     try:
         with click.progressbar(
@@ -123,24 +88,25 @@ def ingest(config: str, domains: tuple[str, ...] | None, max_articles: int | Non
                     total_articles += 1
                     seen_titles.add(chunk.article_title)
                     # Remove old chunks for this article to prevent orphans
-                    collection_mgr.delete_chunks_by_article(collection_name, chunk.article_title)
+                    collection_mgr.delete_chunks_by_article(cfg.qdrant_collection, chunk.article_title)
                     bar.update(1)  # advance one article
 
-                # Embed the chunk text
-                embedding = embedder.embed([chunk.text])[0]
                 batch_chunks.append(chunk)
-                batch_vectors.append(embedding)
+                batch_texts.append(chunk.text)
 
-                # Upsert in batches to avoid overwhelming Qdrant
+                # Upsert in batches to avoid overwhelming Qdrant and to batch embeddings
                 if len(batch_chunks) >= BATCH_SIZE:
-                    collection_mgr.upsert_chunks(collection_name, batch_chunks, batch_vectors)
+                    # Embed all texts in a single API call
+                    vectors = embedder.embed(batch_texts)
+                    collection_mgr.upsert_chunks(cfg.qdrant_collection, batch_chunks, vectors)
                     total_chunks += len(batch_chunks)
                     batch_chunks = []
-                    batch_vectors = []
+                    batch_texts = []
 
             # Final batch
             if batch_chunks:
-                collection_mgr.upsert_chunks(collection_name, batch_chunks, batch_vectors)
+                vectors = embedder.embed(batch_texts)
+                collection_mgr.upsert_chunks(cfg.qdrant_collection, batch_chunks, vectors)
                 total_chunks += len(batch_chunks)
 
     except IngesterError as e:

@@ -1,8 +1,8 @@
 """Splits Wikipedia articles into chunks for embedding and retrieval."""
 
+import hashlib
 import re
 import unicodedata
-import uuid
 from dataclasses import dataclass
 
 
@@ -10,7 +10,7 @@ from dataclasses import dataclass
 class Chunk:
     """A chunk of text from a Wikipedia article."""
 
-    id: str          # UUID used as Qdrant point ID
+    id: str          # Slug-based ID: {article-slug}-{ordinal}
     text: str        # chunk text content
     article_title: str
     article_url: str
@@ -71,14 +71,17 @@ class Chunker:
             article_text: Raw article text (no markup).
 
         Returns:
-            List of Chunks.
+            List of Chunks with stable slug-based IDs.
         """
         slug = self._slugify(article_title)
         article_text = _truncate_before_bibliography(article_text)
         paragraphs = self._split_paragraphs(article_text)
 
         chunks = []
-        for i, para in enumerate(paragraphs):
+        ordinal = 0
+        seen_text_hashes: set[str] = set()
+
+        for para in paragraphs:
             para = para.strip()
             if not para:
                 continue
@@ -89,19 +92,29 @@ class Chunker:
                 continue
 
             if len(para) <= self.max_chars:
+                text_hash = hashlib.md5(para.encode()).hexdigest()[:8]
+                if text_hash in seen_text_hashes:
+                    continue  # Deduplicate identical text within same article
+                seen_text_hashes.add(text_hash)
+                ordinal += 1
                 chunks.append(Chunk(
-                    id=str(uuid.uuid4()),
+                    id=f"{slug}-{ordinal:03d}",
                     text=para,
                     article_title=article_title,
                     article_url=article_url,
                 ))
             else:
                 sub_chunks = self._split_at_sentences(para, self.max_chars)
-                for j, sub in enumerate(sub_chunks):
+                for sub in sub_chunks:
                     sub = sub.strip()
                     if sub and len(sub) >= self.min_chars:
+                        text_hash = hashlib.md5(sub.encode()).hexdigest()[:8]
+                        if text_hash in seen_text_hashes:
+                            continue  # Deduplicate identical text within same article
+                        seen_text_hashes.add(text_hash)
+                        ordinal += 1
                         chunks.append(Chunk(
-                            id=str(uuid.uuid4()),
+                            id=f"{slug}-{ordinal:03d}",
                             text=sub,
                             article_title=article_title,
                             article_url=article_url,
@@ -183,8 +196,12 @@ class Chunker:
         return chunks
 
     def _slugify(self, text: str) -> str:
-        """Convert article title to a URL-safe slug."""
+        """Convert article title to a URL-safe slug.
+
+        Preserves case to avoid collisions between articles whose titles
+        differ only by case (e.g. 'Modernism' vs 'modernism' on Wikipedia).
+        """
         text = unicodedata.normalize('NFKD', text)
         text = re.sub(r'[^\w\s-]', '', text)
         text = re.sub(r'[-\s]+', '-', text)
-        return text.strip('-').lower()
+        return text.strip('-')

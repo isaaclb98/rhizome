@@ -3,7 +3,7 @@
 import os
 import requests
 
-from rhizome.embedder.base import Embedder
+from rhizome.embedder.base import Embedder, EmbeddingError
 
 
 class OpenAIEmbedder(Embedder):
@@ -75,8 +75,3 @@ class OpenAIEmbedder(Embedder):
             "text-embedding-ada-002": 1536,
         }
         return sizes.get(self.model, 1536)
-
-
-class EmbeddingError(Exception):
-    """Raised when embedding generation fails."""
-    pass

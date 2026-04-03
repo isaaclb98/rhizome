@@ -18,6 +18,7 @@ class VectorStoreClient:
         query_vector: list[float],
         top_k: int = 5,
         query_filter: Filter | None = None,
+        with_vector: bool = True,
     ) -> list[dict]:
         """Search for the nearest chunks to a query vector.
 
@@ -25,9 +26,10 @@ class VectorStoreClient:
             query_vector: The query embedding vector.
             top_k: Number of results to return.
             query_filter: Optional Qdrant filter.
+            with_vector: Whether to return stored vectors (default True).
 
         Returns:
-            List of dicts with 'id', 'score', 'payload' keys.
+            List of dicts with 'id', 'score', 'payload', and optionally 'vector' keys.
         """
         from qdrant_client.http import models
 
@@ -36,7 +38,7 @@ class VectorStoreClient:
             limit=top_k,
             filter=query_filter,
             with_payload=True,
-            with_vector=False,
+            with_vector=with_vector,
         )
         response = self.client.http.search_api.search_points(
             collection_name=self.collection_name,
@@ -48,6 +50,7 @@ class VectorStoreClient:
                 "id": hit.id,
                 "score": hit.score,
                 "payload": hit.payload,
+                "vector": hit.vector if with_vector else None,
             }
             for hit in (response.result or [])
         ]
@@ -57,6 +60,8 @@ class VectorStoreClient:
         query_vector: list[float],
         exclude_ids: list[str],
         top_k: int = 5,
+        query_filter: Filter | None = None,
+        with_vector: bool = True,
     ) -> list[dict]:
         """Search but exclude specific chunk IDs from results.
 
@@ -64,10 +69,12 @@ class VectorStoreClient:
             query_vector: The query embedding vector.
             exclude_ids: Chunk IDs to exclude from results.
             top_k: Number of results to return (before exclusion).
+            query_filter: Optional Qdrant filter to apply alongside exclusion.
+            with_vector: Whether to return stored vectors (default True).
 
         Returns:
-            List of dicts with 'id', 'score', 'payload' keys, excluding
-            the specified IDs.
+            List of dicts with 'id', 'score', 'payload', and optionally 'vector' keys,
+            excluding the specified IDs.
         """
         from qdrant_client.http import models
 
@@ -75,8 +82,9 @@ class VectorStoreClient:
         search_req = models.SearchRequest(
             vector=query_vector,
             limit=top_k * 3,
+            filter=query_filter,
             with_payload=True,
-            with_vector=False,
+            with_vector=with_vector,
         )
         response = self.client.http.search_api.search_points(
             collection_name=self.collection_name,
@@ -90,6 +98,7 @@ class VectorStoreClient:
                 "id": hit.id,
                 "score": hit.score,
                 "payload": hit.payload,
+                "vector": hit.vector if with_vector else None,
             }
             for hit in filtered[:top_k]
         ]

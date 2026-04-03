@@ -15,9 +15,6 @@ services:
     env_file:
       - path: .env
         required: false
-    volumes:
-      - ./config.yaml:/app/config.yaml:ro
-    entrypoint: ["rhizome"]
     profiles:
       - dev
 

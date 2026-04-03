@@ -8,14 +8,16 @@ Rhizome is a CLI tool for rhizomatic traversal of Wikipedia embeddings. It walks
 
 ```
 rhizome/
+  config.py        — Pydantic config (env vars: QDRANT_URL, HF_API_TOKEN, etc.)
   corpus/          — Wikipedia ingestion + chunking
-  embedder/        — Embedding provider interface (HuggingFace)
+  embedder/        — Embedding provider interface (OpenAI, HuggingFace)
+  embedder/factory.py — Embedder factory (get_embedder)
   vectorstore/     — Qdrant client wrapper + collection management
   traversal/       — Epsilon-greedy traversal engine
   stitching/       — Markdown formatter with citations
   cli/             — Click CLI commands
 
-config.yaml         — Configuration (collection, traversal params, HuggingFace token)
+.env.example       — Environment variables template
 pyproject.toml     — Python package definition
 ```
 
@@ -41,4 +43,4 @@ rhizome traverse "the tension between modernism and postmodernism" --depth 8
 
 - Python >= 3.11
 - Qdrant (running locally at http://localhost:6333)
-- HuggingFace API token (set `HF_API_TOKEN` env var)
+- OpenAI API key (set `OPENAI_API_KEY` env var) or HuggingFace API token (`HF_API_TOKEN`)
