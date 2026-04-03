@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import Controls from './components/Controls.jsx';
 import Graph from './components/Graph.jsx';
-import Sidebar from './components/Sidebar.jsx';
+import PathPanel from './components/PathPanel.jsx';
 import Legend from './components/Legend.jsx';
 
 const DEFAULT_PARAMS = {
@@ -14,7 +14,7 @@ const DEFAULT_PARAMS = {
 export default function App() {
   const [path, setPath] = useState([]);
   const [stats, setStats] = useState(null);
-  const [selectedNode, setSelectedNode] = useState(null);
+  const [selectedChunkId, setSelectedChunkId] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [params, setParams] = useState(DEFAULT_PARAMS);
@@ -22,7 +22,7 @@ export default function App() {
   const handleTraverse = useCallback(async (requestParams) => {
     setIsLoading(true);
     setError(null);
-    setSelectedNode(null);
+    setSelectedChunkId(null);
 
     try {
       const response = await fetch('/traverse', {
@@ -50,13 +50,9 @@ export default function App() {
   }, []);
 
   const handleNodeClick = useCallback((node) => {
-    setSelectedNode((prev) =>
-      prev && prev.chunk_id === node.chunk_id ? null : node
+    setSelectedChunkId((prev) =>
+      prev && node && prev === node.id ? null : (node ? node.id : null)
     );
-  }, []);
-
-  const handleNodeHover = useCallback((node) => {
-    // Could be used for cursor changes or highlighting
   }, []);
 
   return (
@@ -84,17 +80,19 @@ export default function App() {
         </div>
       )}
 
-      {/* Main content */}
+      {/* Main content: PathPanel (left) + Graph (right) */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Graph */}
+        <PathPanel
+          path={path}
+          selectedChunkId={selectedChunkId}
+          onSelectChunk={handleNodeClick}
+        />
         <div className="flex-1 relative">
           {path.length > 0 ? (
             <Graph
               path={path}
-              stats={stats}
-              selectedNode={selectedNode}
+              selectedChunkId={selectedChunkId}
               onNodeClick={handleNodeClick}
-              onNodeHover={handleNodeHover}
             />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center text-gray-500 text-sm">
@@ -102,15 +100,6 @@ export default function App() {
             </div>
           )}
         </div>
-
-        {/* Sidebar */}
-        <Sidebar
-          selectedNode={selectedNode}
-          stats={stats}
-          pathIndex={
-            selectedNode ? path.findIndex((n) => n.chunk_id === selectedNode.chunk_id) : -1
-          }
-        />
       </div>
 
       {/* Footer */}
