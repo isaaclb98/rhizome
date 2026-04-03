@@ -58,8 +58,8 @@ export default function App() {
   return (
     <div className="flex flex-col h-screen bg-bg-primary overflow-hidden">
       {/* Header */}
-      <header className="flex-none border-b border-bg-tertiary px-6 py-4">
-        <div className="flex items-center gap-3 mb-4">
+      <header className="flex-none border-b border-bg-tertiary px-4 py-3">
+        <div className="flex items-center gap-3 mb-3">
           <h1 className="text-2xl font-bold tracking-tight text-white">
             Rhizome
           </h1>
@@ -68,26 +68,31 @@ export default function App() {
           </span>
         </div>
         <Controls params={params} onTraverse={handleTraverse} isLoading={isLoading} />
-        <div className="mt-3">
+        <div className="mt-2">
           <Legend />
         </div>
       </header>
 
       {/* Error banner */}
       {error && (
-        <div className="flex-none bg-red-900/30 border-b border-red-800 px-6 py-3 text-red-300 text-sm">
+        <div className="flex-none bg-red-900/30 border-b border-red-800 px-4 py-2 text-red-300 text-sm">
           {error}
         </div>
       )}
 
-      {/* Main content: PathPanel (left) + Graph (right) */}
+      {/* Main content: two-column layout */}
       <div className="flex-1 flex overflow-hidden">
-        <PathPanel
-          path={path}
-          selectedChunkId={selectedChunkId}
-          onSelectChunk={handleNodeClick}
-        />
-        <div className="flex-1 relative">
+        {/* Left: path text panel */}
+        <div className="flex-1 overflow-hidden">
+          <PathPanel
+            path={path}
+            selectedChunkId={selectedChunkId}
+            onSelectChunk={handleNodeClick}
+          />
+        </div>
+
+        {/* Right: graph strip — always visible on desktop, collapses on mobile */}
+        <div className="hidden lg:flex lg:flex-col lg:w-80 xl:w-96 border-l border-bg-tertiary overflow-hidden flex-shrink-0">
           {path.length > 0 ? (
             <Graph
               path={path}
@@ -95,8 +100,8 @@ export default function App() {
               onNodeClick={handleNodeClick}
             />
           ) : (
-            <div className="absolute inset-0 flex items-center justify-center text-gray-500 text-sm">
-              Enter a query and click Traverse to explore
+            <div className="flex-1 flex items-center justify-center text-gray-600 text-xs p-4 text-center">
+              Graph appears here after traversal
             </div>
           )}
         </div>
@@ -104,7 +109,7 @@ export default function App() {
 
       {/* Footer */}
       {stats && (
-        <footer className="flex-none border-t border-bg-tertiary px-6 py-2 flex items-center gap-4 text-xs text-gray-500">
+        <footer className="flex-none border-t border-bg-tertiary px-4 py-1.5 flex items-center gap-4 text-xs text-gray-500">
           <div className="flex items-center gap-1.5">
             <span>Depth</span>
             <span className="text-gray-300">{stats.depth}</span>
