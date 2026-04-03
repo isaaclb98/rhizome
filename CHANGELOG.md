@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0 (2026-04-02)
+
+### Bug Fixes
+- **pydantic-settings dependency** — Added to `pyproject.toml` dependencies (was imported but not declared)
+- **Qdrant point ID format** — Slug-based chunk IDs like `Symbolic-annihilation-001` are now hashed to UUIDs before use as Qdrant point IDs (Qdrant requires UUIDs or unsigned integers)
+- **Config defaults** — `embedder_type`, `qdrant_collection`, and `top_k` now have sensible defaults so `rhizome traverse` works without all env vars set
+- **Docker compose env vars** — `docker-compose.yml` and `docker-compose.dev.yml` now pass `QDRANT_COLLECTION` and `EMBEDDER_TYPE` to the container
+
+### Infrastructure
+- **Docker layer caching** — `.github/workflows/docker-push.yml` pushes image to DockerHub with layer caching on every push to main
+- **Dockerfile cleanup** — Removed stale `config.yaml` copy and conflicting `entrypoint` from both compose files
+
 ## 0.2.0 (2026-04-02)
 
 ### Features
