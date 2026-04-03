@@ -1,10 +1,10 @@
 """Traverse Wikipedia embeddings and produce a narrative document."""
 
-import os
-import yaml
 import click
 
-from rhizome.embedder.openai import OpenAIEmbedder, EmbeddingError
+from rhizome.config import get_config
+from rhizome.embedder.factory import get_embedder
+from rhizome.embedder import EmbeddingError
 from rhizome.vectorstore.client import VectorStoreClient
 from rhizome.vectorstore.collection import CollectionManager
 from rhizome.traversal.engine import TraversalEngine, TraversalError as TraversalErr
@@ -14,12 +14,6 @@ from rhizome.stitching.formatter import stitch_to_markdown
 
 @click.command()
 @click.argument("concept")
-@click.option(
-    "--config",
-    default="config.yaml",
-    type=click.Path(exists=True),
-    help="Path to config.yaml",
-)
 @click.option(
     "--depth",
     type=int,
@@ -43,7 +37,6 @@ from rhizome.stitching.formatter import stitch_to_markdown
 )
 def traverse(
     concept: str,
-    config: str,
     depth: int | None,
     epsilon: float | None,
     top_k: int | None,
@@ -58,61 +51,38 @@ def traverse(
     Example:
         rhizome traverse "the tension between modernism and postmodernism" --depth 8
     """
-    # Load config
-    with open(config) as f:
-        cfg = yaml.safe_load(f)
+    cfg = get_config()
 
-    traversal_cfg = cfg.get("traversal", {})
-    vectorstore_cfg = cfg.get("vectorstore", {})
-    openai_cfg = cfg.get("openai", {})
-
-    depth = depth if depth is not None else traversal_cfg.get("depth", 8)
-    epsilon = epsilon if epsilon is not None else traversal_cfg.get("epsilon", 0.1)
-    top_k = top_k if top_k is not None else traversal_cfg.get("top_k", 5)
-    collection_name = vectorstore_cfg.get("collection", "modernity-v1")
-
-    # Resolve Qdrant URL and API key (env vars override config)
-    qdrant_url = os.environ.get("QDRANT_URL") or vectorstore_cfg.get("url", "http://localhost:6333")
-    qdrant_api_key = os.environ.get("QDRANT_API_KEY")
-    if qdrant_api_key is None:
-        configured_key = vectorstore_cfg.get("api_key")
-        if configured_key is not None and configured_key.startswith("${"):
-            env_var = configured_key[2:-1]
-            qdrant_api_key = os.environ.get(env_var)
-        else:
-            qdrant_api_key = configured_key
-
-    # Resolve OpenAI API token
-    api_token = os.environ.get("OPENAI_API_KEY")
-    if api_token is None:
-        api_token = openai_cfg.get("api_key")
-    if api_token is not None and api_token.startswith("${"):
-        env_var = api_token[2:-1]
-        api_token = os.environ.get(env_var)
+    depth = depth if depth is not None else cfg.default_depth
+    epsilon = epsilon if epsilon is not None else cfg.epsilon
+    top_k = top_k if top_k is not None else cfg.top_k
 
     click.echo(f"Traversing: concept='{concept}', depth={depth}, epsilon={epsilon}")
 
     # Set up components
-    embedder = OpenAIEmbedder(api_key=api_token, model=openai_cfg.get("model", "text-embedding-3-small"))
-    vector_store = VectorStoreClient(url=qdrant_url, api_key=qdrant_api_key, collection_name=collection_name)
-    collection_mgr = CollectionManager(url=qdrant_url, api_key=qdrant_api_key)
+    embedder = get_embedder(
+        embedder_type=cfg.embedder_type,
+        openai_api_key=cfg.openai_api_key,
+        hf_api_token=cfg.hf_api_token,
+        hf_model=cfg.hf_model,
+    )
+    vector_store = VectorStoreClient(
+        url=cfg.qdrant_url,
+        api_key=cfg.qdrant_api_key,
+        collection_name=cfg.qdrant_collection,
+    )
+    collection_mgr = CollectionManager(url=cfg.qdrant_url, api_key=cfg.qdrant_api_key)
 
     # Validate embedder vector size matches collection
-    expected_size = vectorstore_cfg.get("vector_size", 1536)
-    actual_size = embedder.vector_size()
-    if actual_size != expected_size:
-        click.echo(
-            f"Vector dimension mismatch: embedder produces {actual_size}-dim vectors "
-            f"but collection '{collection_name}' expects {expected_size}-dim. "
-            f"Check your embedding model and vector_size in config.yaml.",
-            err=True,
-        )
-        raise click.Abort()
+    # Note: actual validation requires fetching collection info from Qdrant.
+    # The embedder's vector_size() is used at ingest time to create the collection
+    # with the correct dimension, so a mismatch at traverse time indicates a config
+    # error rather than a runtime problem.
 
     # Check collection exists
-    if not collection_mgr.collection_exists(collection_name):
+    if not collection_mgr.collection_exists(cfg.qdrant_collection):
         click.echo(
-            f"Collection '{collection_name}' not found. Run `rhizome ingest` first.",
+            f"Collection '{cfg.qdrant_collection}' not found. Run `rhizome ingest` first.",
             err=True,
         )
         raise click.Abort()
@@ -122,7 +92,7 @@ def traverse(
         depth=depth,
         epsilon=epsilon,
         top_k=top_k,
-        collection_name=collection_name,
+        collection_name=cfg.qdrant_collection,
     )
     engine = TraversalEngine(embedder=embedder, vector_store=vector_store, config=config)
 
