@@ -14,7 +14,8 @@ Env vars:
     WIKIPEDIA_DOMAINS   — Comma-separated Wikipedia domains (default: Modernism,Postmodernism,Critical theory)
     DEFAULT_DEPTH       — Default traversal depth (default: 8)
     EPSILON             — Epsilon-greedy exploration probability (default: 0.1)
-    WIKIPEDIA_DEPTH    — PetScan subcategory depth for Wikipedia domain discovery (default: 1)
+    WIKIPEDIA_DEPTH     — PetScan subcategory depth for Wikipedia domain discovery (default: 1)
+    RHIZOME_CHECKPOINT_PATH — Path to the ingestion checkpoint file (default: .rhizome_checkpoints)
 """
 
 from __future__ import annotations
@@ -68,6 +69,10 @@ class RhizomeConfig(BaseSettings):
         alias="WIKIPEDIA_DOMAINS",
     )
     wikipedia_depth: int = Field(default=1, alias="WIKIPEDIA_DEPTH")
+    checkpoint_path: str = Field(
+        default=".rhizome_checkpoints",
+        alias="RHIZOME_CHECKPOINT_PATH",
+    )
     default_depth: int = Field(default=8, alias="DEFAULT_DEPTH")
     epsilon: float = Field(default=0.1, alias="EPSILON")
     top_k: int = Field(default=20, alias="TOP_K")
