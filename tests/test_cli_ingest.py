@@ -29,6 +29,7 @@ class TestIngestCommand:
         mock_cfg.hf_api_token = None
         mock_cfg.hf_model = "sentence-transformers/all-MiniLM-L6-v2"
         mock_cfg.wikipedia_domains = ["Modernism"]
+        mock_cfg.checkpoint_path = ".rhizome_checkpoints"
         mock_get_config.return_value = mock_cfg
 
         mock_coll_mgr = MagicMock()
@@ -73,6 +74,7 @@ class TestIngestCommand:
         mock_cfg.hf_api_token = None
         mock_cfg.hf_model = "sentence-transformers/all-MiniLM-L6-v2"
         mock_cfg.wikipedia_domains = ["Modernism"]
+        mock_cfg.checkpoint_path = ".rhizome_checkpoints"
         mock_get_config.return_value = mock_cfg
 
         mock_coll_mgr = MagicMock()
@@ -117,6 +119,7 @@ class TestIngestCommand:
         mock_cfg.hf_api_token = None
         mock_cfg.hf_model = "sentence-transformers/all-MiniLM-L6-v2"
         mock_cfg.wikipedia_domains = ["Modernism"]
+        mock_cfg.checkpoint_path = ".rhizome_checkpoints"
         mock_get_config.return_value = mock_cfg
 
         mock_coll_mgr = MagicMock()
@@ -167,6 +170,7 @@ class TestIngestCommand:
         mock_cfg.hf_api_token = None
         mock_cfg.hf_model = "sentence-transformers/all-MiniLM-L6-v2"
         mock_cfg.wikipedia_domains = ["Modernism"]
+        mock_cfg.checkpoint_path = ".rhizome_checkpoints"
         mock_get_config.return_value = mock_cfg
 
         mock_get_embedder.side_effect = EmbeddingError(
