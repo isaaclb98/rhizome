@@ -28,7 +28,7 @@ class TestIngestCommand:
         mock_cfg.openai_api_key = "sk-test"
         mock_cfg.hf_api_token = None
         mock_cfg.hf_model = "sentence-transformers/all-MiniLM-L6-v2"
-        mock_cfg.wikipedia_domains = ["Modernism"]
+        mock_cfg.wikipedia_depth = 1
         mock_cfg.checkpoint_path = ".rhizome_checkpoints"
         mock_get_config.return_value = mock_cfg
 
@@ -52,7 +52,7 @@ class TestIngestCommand:
         mock_ingester_cls.return_value = mock_ingester
 
         runner = CliRunner()
-        result = runner.invoke(ingest, [])
+        result = runner.invoke(ingest, ["--category", "Modernism"])
 
         assert result.exit_code == 0
         mock_coll_mgr.create_collection.assert_called_once()
@@ -73,7 +73,7 @@ class TestIngestCommand:
         mock_cfg.openai_api_key = "sk-test"
         mock_cfg.hf_api_token = None
         mock_cfg.hf_model = "sentence-transformers/all-MiniLM-L6-v2"
-        mock_cfg.wikipedia_domains = ["Modernism"]
+        mock_cfg.wikipedia_depth = 1
         mock_cfg.checkpoint_path = ".rhizome_checkpoints"
         mock_get_config.return_value = mock_cfg
 
@@ -97,7 +97,7 @@ class TestIngestCommand:
         mock_ingester_cls.return_value = mock_ingester
 
         runner = CliRunner()
-        result = runner.invoke(ingest, [])
+        result = runner.invoke(ingest, ["--category", "Modernism"])
 
         assert result.exit_code == 0
         mock_coll_mgr.create_collection.assert_not_called()
@@ -118,7 +118,7 @@ class TestIngestCommand:
         mock_cfg.openai_api_key = "sk-test"
         mock_cfg.hf_api_token = None
         mock_cfg.hf_model = "sentence-transformers/all-MiniLM-L6-v2"
-        mock_cfg.wikipedia_domains = ["Modernism"]
+        mock_cfg.wikipedia_depth = 1
         mock_cfg.checkpoint_path = ".rhizome_checkpoints"
         mock_get_config.return_value = mock_cfg
 
@@ -144,14 +144,11 @@ class TestIngestCommand:
                 )
         mock_ingester = MagicMock()
         mock_ingester.ingest.return_value = iter(mock_chunks)
-        mock_ingester._discover_articles.return_value = {
-            "Article A": "Modernism",
-            "Article B": "Modernism",
-        }
+        mock_ingester._discover_articles.return_value = ["Article A", "Article B"]
         mock_ingester_cls.return_value = mock_ingester
 
         runner = CliRunner()
-        result = runner.invoke(ingest, [])
+        result = runner.invoke(ingest, ["--category", "Modernism"])
 
         assert result.exit_code == 0
         # Should report 2 articles, not 2 batches
@@ -173,7 +170,7 @@ class TestIngestCommand:
         mock_cfg.openai_api_key = None  # Missing key
         mock_cfg.hf_api_token = None
         mock_cfg.hf_model = "sentence-transformers/all-MiniLM-L6-v2"
-        mock_cfg.wikipedia_domains = ["Modernism"]
+        mock_cfg.wikipedia_depth = 1
         mock_cfg.checkpoint_path = ".rhizome_checkpoints"
         mock_get_config.return_value = mock_cfg
 
@@ -182,6 +179,6 @@ class TestIngestCommand:
         )
 
         runner = CliRunner()
-        result = runner.invoke(ingest, [])
+        result = runner.invoke(ingest, ["--category", "Modernism"])
 
         assert result.exit_code != 0

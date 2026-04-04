@@ -50,7 +50,6 @@ class TestCollectionManager:
                 text="Modernism is...",
                 article_title="Modernism",
                 article_url="https://en.wikipedia.org/wiki/Modernism",
-                domain="Modernism",
             )
         ]
         vectors = [[0.1] * 1536]
@@ -76,7 +75,7 @@ class TestCollectionManager:
         mock_qdrant_cls.return_value = mock_client
 
         mgr = CollectionManager(url="http://localhost:6333")
-        chunks = [Chunk(id="a", text="a", article_title="A", article_url="http://a", domain="Modernism")]
+        chunks = [Chunk(id="a", text="a", article_title="A", article_url="http://a")]
         vectors = [[0.1], [0.2]]  # 1 chunk, 2 vectors
 
         with pytest.raises(ValueError) as exc_info:
