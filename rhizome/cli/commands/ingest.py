@@ -12,23 +12,17 @@ from rhizome.vectorstore.collection import CollectionManager
 BATCH_SIZE = 100
 
 
-def _checkpoint_path() -> str:
-    """Return path to the ingestion checkpoint file."""
-    return os.path.expanduser("~/.rhizome/ingested_articles.txt")
-
-
-def _load_checkpoint() -> set[str]:
+def _load_checkpoint(path: str) -> set[str]:
     """Load set of already-ingested article titles from checkpoint file."""
-    path = _checkpoint_path()
     if not os.path.exists(path):
         return set()
     return set(line.strip() for line in open(path) if line.strip())
 
 
-def _append_checkpoint(title: str) -> None:
+def _append_checkpoint(path: str, title: str) -> None:
     """Append a successfully-ingested article title to the checkpoint file."""
-    os.makedirs(os.path.dirname(_checkpoint_path()), exist_ok=True)
-    with open(_checkpoint_path(), "a") as f:
+    os.makedirs(os.path.dirname(os.path.abspath(path)) or ".", exist_ok=True)
+    with open(path, "a") as f:
         f.write(title + "\n")
 
 
@@ -42,7 +36,10 @@ def _append_checkpoint(title: str) -> None:
 def ingest(domains: tuple[str, ...] | None):
     """Ingest Wikipedia articles and store chunks in Qdrant.
 
-    Reads configuration from environment variables. Run this before `rhizome traverse`.
+    Checkpointing is automatic — articles already in the checkpoint file are skipped.
+    The checkpoint path is controlled by RHIZOME_CHECKPOINT_PATH (default: .rhizome_checkpoints).
+
+    Run this before `rhizome traverse`.
 
     Example:
         rhizome ingest --domain Modernism --domain Postmodernism
@@ -50,8 +47,10 @@ def ingest(domains: tuple[str, ...] | None):
     cfg = get_config()
 
     domain_list = list(domains) if domains else cfg.wikipedia_domains
+    checkpoint_path = cfg.checkpoint_path
 
     click.echo(f"Starting ingestion: domains={domain_list}, depth={cfg.wikipedia_depth}")
+    click.echo(f"Checkpoint: {checkpoint_path}")
 
     # Set up components
     embedder = get_embedder(
@@ -75,7 +74,7 @@ def ingest(domains: tuple[str, ...] | None):
         click.echo(f"Using existing collection: {cfg.qdrant_collection}")
 
     # Load checkpoint — skip articles already ingested from prior runs
-    checkpoint = _load_checkpoint()
+    checkpoint = _load_checkpoint(checkpoint_path)
     if checkpoint:
         click.echo(f"Loaded checkpoint: {len(checkpoint)} articles already ingested, will skip")
 
@@ -101,13 +100,10 @@ def ingest(domains: tuple[str, ...] | None):
             show_percent=True,
         ) as bar:
             for chunk in ingester.ingest():
-                # Skip articles already ingested (checkpoint)
+                # Skip articles already ingested (checkpoint is the source of truth)
                 if chunk.article_title in checkpoint:
-                    bar.update(0)  # advance bar without processing
+                    bar.update(1)
                     continue
-
-                # New article — delete any stale chunks and upsert
-                collection_mgr.delete_chunks_by_article(cfg.qdrant_collection, chunk.article_title)
 
                 batch_chunks.append(chunk)
                 batch_texts.append(chunk.text)
@@ -120,7 +116,7 @@ def ingest(domains: tuple[str, ...] | None):
                     # Record each new article in checkpoint after successful upsert
                     for c in batch_chunks:
                         if c.article_title not in checkpoint:
-                            _append_checkpoint(c.article_title)
+                            _append_checkpoint(checkpoint_path, c.article_title)
                             checkpoint.add(c.article_title)
                             total_articles += 1
                     batch_chunks = []
@@ -134,7 +130,7 @@ def ingest(domains: tuple[str, ...] | None):
                 total_chunks += len(batch_chunks)
                 for c in batch_chunks:
                     if c.article_title not in checkpoint:
-                        _append_checkpoint(c.article_title)
+                        _append_checkpoint(checkpoint_path, c.article_title)
                         checkpoint.add(c.article_title)
                         total_articles += 1
                 bar.update(1)
