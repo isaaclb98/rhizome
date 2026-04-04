@@ -9,7 +9,7 @@ from typing import Iterator, Optional
 from rhizome.corpus.chunker import Chunker, Chunk
 
 
-PETSCAN_URL = "https://petscan.wmflabs.org/"
+PETSCAN_URL = "https://petscan.wmcloud.org/"
 WIKIPEDIA_API = "https://en.wikipedia.org/w/api.php"
 
 
