@@ -32,10 +32,11 @@ def _append_checkpoint(path: str, title: str) -> None:
 @click.option(
     "--categories",
     "categories",
-    required=True,
-    help="Wikipedia categories to ingest (comma-separated, e.g. --categories Modernism,Postmodernism)",
+    default=None,
+    help="Wikipedia categories to ingest (comma-separated, e.g. --categories Modernism,Postmodernism). "
+         "Defaults to WIKIPEDIA_CATEGORIES env var or config.",
 )
-def ingest(categories: str):
+def ingest(categories: str | None):
     """Ingest Wikipedia articles from PetScan category membership and store chunks in Qdrant.
 
     Checkpointing is automatic — articles already in the checkpoint file are skipped.
@@ -46,7 +47,11 @@ def ingest(categories: str):
     """
     cfg = get_config()
 
-    category_list = [c.strip() for c in categories.split(",") if c.strip()]
+    category_list = (
+        [c.strip() for c in categories.split(",") if c.strip()]
+        if categories
+        else cfg.wikipedia_categories
+    )
     checkpoint_path = cfg.checkpoint_path
 
     click.echo(f"[rhizome] Starting ingestion: categories={category_list}, depth={cfg.wikipedia_depth}")
