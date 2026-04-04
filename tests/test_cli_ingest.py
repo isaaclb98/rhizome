@@ -144,6 +144,10 @@ class TestIngestCommand:
                 )
         mock_ingester = MagicMock()
         mock_ingester.ingest.return_value = iter(mock_chunks)
+        mock_ingester._discover_articles.return_value = {
+            "Article A": "Modernism",
+            "Article B": "Modernism",
+        }
         mock_ingester_cls.return_value = mock_ingester
 
         runner = CliRunner()
