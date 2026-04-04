@@ -148,6 +148,47 @@ app.add_middleware(
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
+@app.get("/domains")
+def get_domains():
+    """Return all unique domain values in the collection.
+
+    Reads domain values from Qdrant using scroll pagination with a page limit.
+    Falls back to partial results if Qdrant is slow or unreachable.
+    """
+    try:
+        exists = _vector_store.client.collection_exists(_config.qdrant_collection)
+    except Exception:
+        raise HTTPException(status_code=503, detail="Qdrant unavailable")
+
+    if not exists:
+        raise HTTPException(status_code=400, detail="Collection not found")
+
+    domains: set[str] = set()
+    offset = None
+    max_pages = 50  # safety limit — 50 * 1000 = 50K points scanned
+
+    try:
+        for _ in range(max_pages):
+            result, next_offset = _vector_store.client.scroll(
+                collection_name=_config.qdrant_collection,
+                limit=1000,
+                with_payload=True,
+                offset=offset,
+            )
+            for point in result:
+                domain = point.payload.get("domain")
+                if domain:
+                    domains.add(domain)
+            if next_offset is None:
+                break
+            offset = next_offset
+    except Exception:
+        pass  # Return whatever we collected so far
+
+    sorted_domains = sorted(domains)
+    return {"domains": sorted_domains}
+
+
 @app.get("/health")
 def health():
     """Health check: verifies Qdrant connectivity.
