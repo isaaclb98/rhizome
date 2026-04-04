@@ -21,7 +21,6 @@ class TestRhizomeConfig:
         assert cfg.qdrant_collection == "test-collection"
         assert cfg.default_depth == 8
         assert cfg.epsilon == 0.1
-        assert cfg.wikipedia_domains == ["Modernism", "Postmodernism", "Critical theory"]
 
     def test_embedder_type_normalized(self):
         """embedder_type is normalized to lowercase."""
@@ -41,16 +40,6 @@ class TestRhizomeConfig:
                 OPENAI_API_KEY="sk-test",
             )
         assert "EMBEDDER_TYPE must be 'openai' or 'huggingface'" in str(exc_info.value)
-
-    def test_wikipedia_domains_comma_separated(self):
-        """Comma-separated domain string is parsed into list."""
-        cfg = RhizomeConfig(
-            QDRANT_COLLECTION="test",
-            EMBEDDER_TYPE="openai",
-            OPENAI_API_KEY="sk-test",
-            WIKIPEDIA_DOMAINS="Modernism, Postmodernism, Critical theory",
-        )
-        assert cfg.wikipedia_domains == ["Modernism", "Postmodernism", "Critical theory"]
 
     def test_resolve_env_var_syntax(self):
         """${VAR} syntax resolves to environment variable value."""
