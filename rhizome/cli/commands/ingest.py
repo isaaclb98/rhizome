@@ -31,28 +31,27 @@ def _append_checkpoint(path: str, title: str) -> None:
 
 @click.command()
 @click.option(
-    "--domain",
-    "domains",
+    "--category",
+    "categories",
     multiple=True,
-    help="Wikipedia domain(s) to ingest. Can be specified multiple times (overrides config)",
+    required=True,
+    help="Wikipedia category to ingest. Can be specified multiple times (e.g. --category Modernism --category Postmodernism)",
 )
-def ingest(domains: tuple[str, ...] | None):
-    """Ingest Wikipedia articles and store chunks in Qdrant.
+def ingest(categories: tuple[str, ...]):
+    """Ingest Wikipedia articles from PetScan category membership and store chunks in Qdrant.
 
     Checkpointing is automatic — articles already in the checkpoint file are skipped.
     The checkpoint path is controlled by RHIZOME_CHECKPOINT_PATH (default: .rhizome_checkpoints).
 
-    Run this before `rhizome traverse`.
-
     Example:
-        rhizome ingest --domain Modernism --domain Postmodernism
+        rhizome ingest --category Modernism --category Postmodernism
     """
     cfg = get_config()
 
-    domain_list = list(domains) if domains else cfg.wikipedia_domains
+    category_list = list(categories)
     checkpoint_path = cfg.checkpoint_path
 
-    click.echo(f"[rhizome] Starting ingestion: domains={domain_list}, depth={cfg.wikipedia_depth}")
+    click.echo(f"[rhizome] Starting ingestion: categories={category_list}, depth={cfg.wikipedia_depth}")
     click.echo(f"[rhizome] Checkpoint: {checkpoint_path}")
 
     # Set up components
@@ -83,24 +82,16 @@ def ingest(domains: tuple[str, ...] | None):
 
     # Discover articles via PetScan
     ingester = WikipediaIngester(
-        domains=domain_list,
+        categories=category_list,
         depth=cfg.wikipedia_depth,
         chunker=Chunker(),
     )
     start_discovery = time.monotonic()
-    discovered = ingester._discover_articles()
+    discovered_titles = ingester._discover_articles()
+    click.echo(f"[rhizome] PetScan: {len(discovered_titles)} articles found ({time.monotonic() - start_discovery:.1f}s)")
 
-    # Log per-domain counts
-    domain_counts: dict[str, int] = {}
-    for title, domain in discovered.items():
-        domain_counts[domain] = domain_counts.get(domain, 0) + 1
-
-    for domain, count in domain_counts.items():
-        click.echo(f"[rhizome] PetScan: {count} articles found in domain '{domain}'")
-    click.echo(f"[rhizome] PetScan: {len(discovered)} total articles discovered ({time.monotonic() - start_discovery:.1f}s)")
-
-    to_ingest = len(discovered) - len(checkpoint & set(discovered.keys()))
-    click.echo(f"[rhizome] Ingesting: {to_ingest} new articles (+ {len(checkpoint & set(discovered.keys()))} already checkpointed)")
+    to_ingest = len(discovered_titles) - len(checkpoint & set(discovered_titles))
+    click.echo(f"[rhizome] Ingesting: {to_ingest} new articles (+ {len(checkpoint & set(discovered_titles))} already checkpointed)")
 
     total_chunks = 0
     total_articles = 0
