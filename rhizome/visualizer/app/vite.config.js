@@ -8,10 +8,6 @@ export default defineConfig({
     proxy: {
       '/traverse': 'http://localhost:8000',
       '/health': 'http://localhost:8000',
-      '/domains': {
-        target: 'http://localhost:8000',
-        timeout: 120_000,
-      },
     },
   },
   build: {

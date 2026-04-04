@@ -18,7 +18,6 @@ class TraversalStep:
     text: str
     article_title: str
     article_url: str
-    domain: str
     depth: int
     similarity: float
     forced_jump: bool
@@ -172,7 +171,6 @@ class TraversalEngine:
                 text=payload["text"],
                 article_title=payload["article_title"],
                 article_url=payload["article_url"],
-                domain=payload.get("domain", "Unknown"),
                 depth=depth,
                 similarity=float(selected["score"]),
                 forced_jump=in_forced_jump,

@@ -11,10 +11,9 @@ Env vars:
     OPENAI_API_KEY      — OpenAI API key (required if EMBEDDER_TYPE=openai)
     HF_API_TOKEN        — HuggingFace API token (required if EMBEDDER_TYPE=huggingface)
     HF_MODEL            — HuggingFace model (default: sentence-transformers/all-MiniLM-L6-v2)
-    WIKIPEDIA_DOMAINS   — Comma-separated Wikipedia domains (default: Modernism,Postmodernism,Critical theory)
     DEFAULT_DEPTH       — Default traversal depth (default: 8)
     EPSILON             — Epsilon-greedy exploration probability (default: 0.1)
-    WIKIPEDIA_DEPTH     — PetScan subcategory depth for Wikipedia domain discovery (default: 1)
+    WIKIPEDIA_DEPTH     — PetScan subcategory depth for Wikipedia article discovery (default: 1)
     RHIZOME_CHECKPOINT_PATH — Path to the ingestion checkpoint file (default: .rhizome_checkpoints)
 """
 
@@ -64,10 +63,6 @@ class RhizomeConfig(BaseSettings):
     )
 
     # Corpus / traversal
-    wikipedia_domains: list[str] = Field(
-        default=["Modernism", "Postmodernism", "Critical theory"],
-        alias="WIKIPEDIA_DOMAINS",
-    )
     wikipedia_depth: int = Field(default=1, alias="WIKIPEDIA_DEPTH")
     checkpoint_path: str = Field(
         default=".rhizome_checkpoints",
@@ -94,14 +89,6 @@ class RhizomeConfig(BaseSettings):
         if isinstance(v, str) and v.startswith("${") and v.endswith("}"):
             env_name = v[2:-1]
             return os.environ.get(env_name)
-        return v
-
-    @field_validator("wikipedia_domains", mode="before")
-    @classmethod
-    def parse_comma_separated(cls, v: str | list[str]) -> list[str]:
-        """Parse comma-separated string into list of domains."""
-        if isinstance(v, str):
-            return [d.strip() for d in v.split(",") if d.strip()]
         return v
 
     @field_validator("embedder_type", mode="before")

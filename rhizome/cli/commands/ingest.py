@@ -1,6 +1,7 @@
 """Ingest Wikipedia articles and store chunks in Qdrant."""
 
 import os
+import time
 import click
 
 from rhizome.config import get_config
@@ -10,6 +11,7 @@ from rhizome.embedder.factory import get_embedder
 from rhizome.vectorstore.collection import CollectionManager
 
 BATCH_SIZE = 100
+LOG_EVERY = 50  # log every N articles ingested
 
 
 def _load_checkpoint(path: str) -> set[str]:
@@ -28,29 +30,27 @@ def _append_checkpoint(path: str, title: str) -> None:
 
 @click.command()
 @click.option(
-    "--domain",
-    "domains",
-    multiple=True,
-    help="Wikipedia domain(s) to ingest. Can be specified multiple times (overrides config)",
+    "--categories",
+    "categories",
+    required=True,
+    help="Wikipedia categories to ingest (comma-separated, e.g. --categories Modernism,Postmodernism)",
 )
-def ingest(domains: tuple[str, ...] | None):
-    """Ingest Wikipedia articles and store chunks in Qdrant.
+def ingest(categories: str):
+    """Ingest Wikipedia articles from PetScan category membership and store chunks in Qdrant.
 
     Checkpointing is automatic — articles already in the checkpoint file are skipped.
     The checkpoint path is controlled by RHIZOME_CHECKPOINT_PATH (default: .rhizome_checkpoints).
 
-    Run this before `rhizome traverse`.
-
     Example:
-        rhizome ingest --domain Modernism --domain Postmodernism
+        rhizome ingest --categories Modernism,Postmodernism
     """
     cfg = get_config()
 
-    domain_list = list(domains) if domains else cfg.wikipedia_domains
+    category_list = [c.strip() for c in categories.split(",") if c.strip()]
     checkpoint_path = cfg.checkpoint_path
 
-    click.echo(f"Starting ingestion: domains={domain_list}, depth={cfg.wikipedia_depth}")
-    click.echo(f"Checkpoint: {checkpoint_path}")
+    click.echo(f"[rhizome] Starting ingestion: categories={category_list}, depth={cfg.wikipedia_depth}")
+    click.echo(f"[rhizome] Checkpoint: {checkpoint_path}")
 
     # Set up components
     embedder = get_embedder(
@@ -64,45 +64,49 @@ def ingest(domains: tuple[str, ...] | None):
     # Ensure collection exists
     vector_size = embedder.vector_size()
     if not collection_mgr.collection_exists(cfg.qdrant_collection):
-        click.echo(f"Creating collection: {cfg.qdrant_collection} (vector_size={vector_size})")
+        click.echo(f"[rhizome] Creating collection: {cfg.qdrant_collection} (vector_size={vector_size})")
         collection_mgr.create_collection(
             collection_name=cfg.qdrant_collection,
             vector_size=vector_size,
             recreate=False,
         )
     else:
-        click.echo(f"Using existing collection: {cfg.qdrant_collection}")
+        click.echo(f"[rhizome] Using existing collection: {cfg.qdrant_collection}")
 
     # Load checkpoint — skip articles already ingested from prior runs
     checkpoint = _load_checkpoint(checkpoint_path)
     if checkpoint:
-        click.echo(f"Loaded checkpoint: {len(checkpoint)} articles already ingested, will skip")
+        click.echo(f"[rhizome] Checkpoint: {len(checkpoint)} articles already ingested, will skip")
 
-    # Discover articles first (to get actual count for progress bar)
+    # Discover articles via PetScan
     ingester = WikipediaIngester(
-        domains=domain_list,
+        categories=category_list,
         depth=cfg.wikipedia_depth,
         chunker=Chunker(),
     )
+    start_discovery = time.monotonic()
     discovered_titles = ingester._discover_articles()
-    article_count = len(discovered_titles)
+    click.echo(f"[rhizome] PetScan: {len(discovered_titles)} articles found ({time.monotonic() - start_discovery:.1f}s)")
+
+    to_ingest = len(discovered_titles) - len(checkpoint & set(discovered_titles))
+    click.echo(f"[rhizome] Ingesting: {to_ingest} new articles (+ {len(checkpoint & set(discovered_titles))} already checkpointed)")
 
     total_chunks = 0
     total_articles = 0
     batch_chunks = []
     batch_texts = []
+    start_ingest = time.monotonic()
 
     try:
         with click.progressbar(
-            length=article_count,
-            label="Ingesting articles",
+            length=to_ingest,
+            label="Ingesting",
             show_eta=True,
             show_percent=True,
         ) as bar:
             for chunk in ingester.ingest():
                 # Skip articles already ingested (checkpoint is the source of truth)
                 if chunk.article_title in checkpoint:
-                    bar.update(1)
                     continue
 
                 batch_chunks.append(chunk)
@@ -113,15 +117,29 @@ def ingest(domains: tuple[str, ...] | None):
                     vectors = embedder.embed(batch_texts)
                     collection_mgr.upsert_chunks(cfg.qdrant_collection, batch_chunks, vectors)
                     total_chunks += len(batch_chunks)
+
                     # Record each new article in checkpoint after successful upsert
                     for c in batch_chunks:
                         if c.article_title not in checkpoint:
                             _append_checkpoint(checkpoint_path, c.article_title)
                             checkpoint.add(c.article_title)
                             total_articles += 1
+                            bar.update(1)
+
+                            # Periodic verbose log every LOG_EVERY articles
+                            if total_articles % LOG_EVERY == 0:
+                                bar.stop()
+                                elapsed = time.monotonic() - start_ingest
+                                rate = total_articles / elapsed if elapsed > 0 else 0
+                                click.echo(
+                                    f"[rhizome] {total_articles}/{to_ingest} articles "
+                                    f"({total_chunks} chunks, {rate:.1f} articles/s)",
+                                    err=True,
+                                )
+                                bar.render_progress()
+
                     batch_chunks = []
                     batch_texts = []
-                    bar.update(1)
 
             # Final batch
             if batch_chunks:
@@ -133,10 +151,14 @@ def ingest(domains: tuple[str, ...] | None):
                         _append_checkpoint(checkpoint_path, c.article_title)
                         checkpoint.add(c.article_title)
                         total_articles += 1
-                bar.update(1)
+                        bar.update(1)
 
     except IngesterError as e:
-        click.echo(f"Error during ingestion: {e}", err=True)
+        click.echo(f"[rhizome] Error during ingestion: {e}", err=True)
         raise click.Abort()
 
-    click.echo(f"Ingestion complete: {total_chunks} chunks from {total_articles} articles")
+    elapsed = time.monotonic() - start_ingest
+    click.echo(
+        f"[rhizome] Done: {total_articles} articles, {total_chunks} chunks "
+        f"in {elapsed:.1f}s ({total_articles/elapsed:.1f} articles/s)"
+    )
