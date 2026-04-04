@@ -1,5 +1,6 @@
 """Ingest Wikipedia articles and store chunks in Qdrant."""
 
+import os
 import click
 
 from rhizome.config import get_config
@@ -9,6 +10,26 @@ from rhizome.embedder.factory import get_embedder
 from rhizome.vectorstore.collection import CollectionManager
 
 BATCH_SIZE = 100
+
+
+def _checkpoint_path() -> str:
+    """Return path to the ingestion checkpoint file."""
+    return os.path.expanduser("~/.rhizome/ingested_articles.txt")
+
+
+def _load_checkpoint() -> set[str]:
+    """Load set of already-ingested article titles from checkpoint file."""
+    path = _checkpoint_path()
+    if not os.path.exists(path):
+        return set()
+    return set(line.strip() for line in open(path) if line.strip())
+
+
+def _append_checkpoint(title: str) -> None:
+    """Append a successfully-ingested article title to the checkpoint file."""
+    os.makedirs(os.path.dirname(_checkpoint_path()), exist_ok=True)
+    with open(_checkpoint_path(), "a") as f:
+        f.write(title + "\n")
 
 
 @click.command()
@@ -53,6 +74,11 @@ def ingest(domains: tuple[str, ...] | None):
     else:
         click.echo(f"Using existing collection: {cfg.qdrant_collection}")
 
+    # Load checkpoint — skip articles already ingested from prior runs
+    checkpoint = _load_checkpoint()
+    if checkpoint:
+        click.echo(f"Loaded checkpoint: {len(checkpoint)} articles already ingested, will skip")
+
     # Discover articles first (to get actual count for progress bar)
     ingester = WikipediaIngester(
         domains=domain_list,
@@ -64,7 +90,6 @@ def ingest(domains: tuple[str, ...] | None):
 
     total_chunks = 0
     total_articles = 0
-    seen_titles: set[str] = set()
     batch_chunks = []
     batch_texts = []
 
@@ -76,31 +101,43 @@ def ingest(domains: tuple[str, ...] | None):
             show_percent=True,
         ) as bar:
             for chunk in ingester.ingest():
-                # Track new articles — delete any stale chunks from prior ingest
-                if chunk.article_title not in seen_titles:
-                    total_articles += 1
-                    seen_titles.add(chunk.article_title)
-                    # Remove old chunks for this article to prevent orphans
-                    collection_mgr.delete_chunks_by_article(cfg.qdrant_collection, chunk.article_title)
-                    bar.update(1)  # advance one article
+                # Skip articles already ingested (checkpoint)
+                if chunk.article_title in checkpoint:
+                    bar.update(0)  # advance bar without processing
+                    continue
+
+                # New article — delete any stale chunks and upsert
+                collection_mgr.delete_chunks_by_article(cfg.qdrant_collection, chunk.article_title)
 
                 batch_chunks.append(chunk)
                 batch_texts.append(chunk.text)
 
                 # Upsert in batches to avoid overwhelming Qdrant and to batch embeddings
                 if len(batch_chunks) >= BATCH_SIZE:
-                    # Embed all texts in a single API call
                     vectors = embedder.embed(batch_texts)
                     collection_mgr.upsert_chunks(cfg.qdrant_collection, batch_chunks, vectors)
                     total_chunks += len(batch_chunks)
+                    # Record each new article in checkpoint after successful upsert
+                    for c in batch_chunks:
+                        if c.article_title not in checkpoint:
+                            _append_checkpoint(c.article_title)
+                            checkpoint.add(c.article_title)
+                            total_articles += 1
                     batch_chunks = []
                     batch_texts = []
+                    bar.update(1)
 
             # Final batch
             if batch_chunks:
                 vectors = embedder.embed(batch_texts)
                 collection_mgr.upsert_chunks(cfg.qdrant_collection, batch_chunks, vectors)
                 total_chunks += len(batch_chunks)
+                for c in batch_chunks:
+                    if c.article_title not in checkpoint:
+                        _append_checkpoint(c.article_title)
+                        checkpoint.add(c.article_title)
+                        total_articles += 1
+                bar.update(1)
 
     except IngesterError as e:
         click.echo(f"Error during ingestion: {e}", err=True)
