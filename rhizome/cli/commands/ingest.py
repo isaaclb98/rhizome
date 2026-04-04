@@ -31,24 +31,23 @@ def _append_checkpoint(path: str, title: str) -> None:
 
 @click.command()
 @click.option(
-    "--category",
+    "--categories",
     "categories",
-    multiple=True,
     required=True,
-    help="Wikipedia category to ingest. Can be specified multiple times (e.g. --category Modernism --category Postmodernism)",
+    help="Wikipedia categories to ingest (comma-separated, e.g. --categories Modernism,Postmodernism)",
 )
-def ingest(categories: tuple[str, ...]):
+def ingest(categories: str):
     """Ingest Wikipedia articles from PetScan category membership and store chunks in Qdrant.
 
     Checkpointing is automatic — articles already in the checkpoint file are skipped.
     The checkpoint path is controlled by RHIZOME_CHECKPOINT_PATH (default: .rhizome_checkpoints).
 
     Example:
-        rhizome ingest --category Modernism --category Postmodernism
+        rhizome ingest --categories Modernism,Postmodernism
     """
     cfg = get_config()
 
-    category_list = list(categories)
+    category_list = [c.strip() for c in categories.split(",") if c.strip()]
     checkpoint_path = cfg.checkpoint_path
 
     click.echo(f"[rhizome] Starting ingestion: categories={category_list}, depth={cfg.wikipedia_depth}")
