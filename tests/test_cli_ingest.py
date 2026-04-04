@@ -52,7 +52,7 @@ class TestIngestCommand:
         mock_ingester_cls.return_value = mock_ingester
 
         runner = CliRunner()
-        result = runner.invoke(ingest, ["--category", "Modernism"])
+        result = runner.invoke(ingest, ["--categories", "Modernism"])
 
         assert result.exit_code == 0
         mock_coll_mgr.create_collection.assert_called_once()
@@ -97,7 +97,7 @@ class TestIngestCommand:
         mock_ingester_cls.return_value = mock_ingester
 
         runner = CliRunner()
-        result = runner.invoke(ingest, ["--category", "Modernism"])
+        result = runner.invoke(ingest, ["--categories", "Modernism"])
 
         assert result.exit_code == 0
         mock_coll_mgr.create_collection.assert_not_called()
@@ -148,7 +148,7 @@ class TestIngestCommand:
         mock_ingester_cls.return_value = mock_ingester
 
         runner = CliRunner()
-        result = runner.invoke(ingest, ["--category", "Modernism"])
+        result = runner.invoke(ingest, ["--categories", "Modernism"])
 
         assert result.exit_code == 0
         # Should report 2 articles, not 2 batches
@@ -179,6 +179,6 @@ class TestIngestCommand:
         )
 
         runner = CliRunner()
-        result = runner.invoke(ingest, ["--category", "Modernism"])
+        result = runner.invoke(ingest, ["--categories", "Modernism"])
 
         assert result.exit_code != 0
