@@ -1,18 +1,20 @@
 import { useEffect, useRef, useMemo, useCallback } from 'react';
 import * as d3 from 'd3';
 
-const DOMAIN_COLORS = {
-  Modernism: '#6366f1',
-  Postmodernism: '#a855f7',
-  'Critical theory': '#f97316',
-  Unknown: '#6b7280',
-};
+const DOMAIN_PALETTE = [
+  '#6366f1', '#a855f7', '#f97316', '#22c55e', '#06b6d4',
+  '#ec4899', '#eab308', '#14b8a6', '#f43f5e', '#8b5cf6',
+  '#84cc16', '#0ea5e9',
+];
 
-function getDomainColor(domain) {
-  return DOMAIN_COLORS[domain] || DOMAIN_COLORS.Unknown;
+function getDomainColor(domain, domains = []) {
+  const idx = domains.indexOf(domain);
+  if (idx >= 0) return DOMAIN_PALETTE[idx % DOMAIN_PALETTE.length];
+  // Unknown domain — assign a gray fallback
+  return '#6b7280';
 }
 
-export default function Graph({ path, selectedChunkId, onNodeClick }) {
+export default function Graph({ path, selectedChunkId, onNodeClick, domains = [] }) {
   const svgRef = useRef(null);
   const containerRef = useRef(null);
 
@@ -24,7 +26,7 @@ export default function Graph({ path, selectedChunkId, onNodeClick }) {
         : step.article_title,
       fullTitle: step.article_title,
       domain: step.domain,
-      color: getDomainColor(step.domain),
+      color: getDomainColor(step.domain, domains),
       stepIndex: i,
       forced_jump: step.forced_jump,
       similarity: step.similarity,

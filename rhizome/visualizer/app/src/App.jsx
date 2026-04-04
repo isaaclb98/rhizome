@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import Controls from './components/Controls.jsx';
 import Graph from './components/Graph.jsx';
 import PathPanel from './components/PathPanel.jsx';
@@ -20,6 +20,16 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [params, setParams] = useState(DEFAULT_PARAMS);
+  const [domains, setDomains] = useState([]);
+
+  // Fetch unique domains after first successful traversal (lazy, cached in state)
+  const fetchDomainsIfNeeded = useCallback(() => {
+    if (domains.length > 0) return;
+    fetch('/domains')
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (d?.domains) setDomains(d.domains); })
+      .catch(() => {});
+  }, [domains.length]);
 
   const handleTraverse = useCallback(async (requestParams) => {
     setIsLoading(true);
@@ -42,6 +52,7 @@ export default function App() {
       setPath(data.path);
       setStats(data.stats);
       setParams(requestParams);
+      fetchDomainsIfNeeded();
     } catch (err) {
       setError(err.message || 'Traversal failed');
       setPath([]);
@@ -70,7 +81,7 @@ export default function App() {
         </div>
         <Controls params={params} onTraverse={handleTraverse} isLoading={isLoading} />
         <div className="mt-2">
-          <Legend />
+          <Legend domains={domains} />
         </div>
       </header>
 
@@ -99,6 +110,7 @@ export default function App() {
               path={path}
               selectedChunkId={selectedChunkId}
               onNodeClick={handleNodeClick}
+              domains={domains}
             />
           ) : (
             <div className="relative flex-1">
