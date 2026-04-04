@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.5.0 (2026-04-04)
+
+### Breaking Changes
+- **Domain field removed** — `Chunk`, `TraversalStep`, and all API response models no longer include a `domain` field. Nodes in the visualizer now all use the same color. Collections created before this version are fully compatible (domain field was never mandatory).
+- **`--domain` flag removed** — `rhizome ingest` now uses `--categories` (required, comma-separated) instead of `--domain` (multiple).
+- **`/domains` endpoint removed** — The dynamic domain legend feature is replaced by single-color visualization.
+
+### Features
+- **`--categories` ingestion** — Wikipedia article discovery now uses PetScan category membership. Pass comma-separated categories: `rhizome ingest --categories Modernism,Postmodernism`.
+- **First-class checkpoint** — Articles already ingested are skipped on re-run. Checkpoint file is append-only and survives process crashes.
+- **Throughput logging** — Ingestion now reports articles/s and chunks/s every 50 articles.
+
+### Bug Fixes
+- **PetScan URL** — Fixed to `petscan.wmcloud.org` (was `wmflabs.org`, which redirects and may fail).
+
+### Changes
+- **WikipediaIngester** — Now accepts `categories` (list) instead of `domains`. Removed `seed_titles` parameter. Runs a single PetScan query with all categories as a union.
+- **Chunker** — `chunk_article()` no longer requires a `domain` argument.
+
 ## 0.4.0 (2026-04-03)
 
 ### Features
