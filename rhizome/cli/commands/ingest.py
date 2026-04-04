@@ -1,7 +1,6 @@
 """Ingest Wikipedia articles and store chunks in Qdrant."""
 
 import os
-import sys
 import time
 import click
 
@@ -129,12 +128,15 @@ def ingest(categories: str):
 
                             # Periodic verbose log every LOG_EVERY articles
                             if total_articles % LOG_EVERY == 0:
+                                bar.stop()
                                 elapsed = time.monotonic() - start_ingest
                                 rate = total_articles / elapsed if elapsed > 0 else 0
-                                sys.stderr.write(
-                                    f"\n[rhizome] {total_articles}/{to_ingest} articles "
-                                    f"({total_chunks} chunks, {rate:.1f} articles/s)\n"
+                                click.echo(
+                                    f"[rhizome] {total_articles}/{to_ingest} articles "
+                                    f"({total_chunks} chunks, {rate:.1f} articles/s)",
+                                    err=True,
                                 )
+                                bar.render_progress()
 
                     batch_chunks = []
                     batch_texts = []
