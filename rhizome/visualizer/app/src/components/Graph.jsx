@@ -1,20 +1,9 @@
 import { useEffect, useRef, useMemo, useCallback } from 'react';
 import * as d3 from 'd3';
 
-const DOMAIN_PALETTE = [
-  '#6366f1', '#a855f7', '#f97316', '#22c55e', '#06b6d4',
-  '#ec4899', '#eab308', '#14b8a6', '#f43f5e', '#8b5cf6',
-  '#84cc16', '#0ea5e9',
-];
+const NODE_COLOR = '#6366f1';  // single color for all nodes
 
-function getDomainColor(domain, domains = []) {
-  const idx = domains.indexOf(domain);
-  if (idx >= 0) return DOMAIN_PALETTE[idx % DOMAIN_PALETTE.length];
-  // Unknown domain — assign a gray fallback
-  return '#6b7280';
-}
-
-export default function Graph({ path, selectedChunkId, onNodeClick, domains = [] }) {
+export default function Graph({ path, selectedChunkId, onNodeClick }) {
   const svgRef = useRef(null);
   const containerRef = useRef(null);
 
@@ -25,8 +14,7 @@ export default function Graph({ path, selectedChunkId, onNodeClick, domains = []
         ? step.article_title.slice(0, 20) + '…'
         : step.article_title,
       fullTitle: step.article_title,
-      domain: step.domain,
-      color: getDomainColor(step.domain, domains),
+      color: NODE_COLOR,
       stepIndex: i,
       forced_jump: step.forced_jump,
       similarity: step.similarity,
@@ -170,7 +158,6 @@ export default function Graph({ path, selectedChunkId, onNodeClick, domains = []
         .on('drag', function(event, d) {
           const nd = nodeById.get(d.id);
           if (!nd) return;
-          // Clamp within panel bounds (accounting for pan offset)
           const nx = Math.max(-panX, Math.min(W - panX, event.x));
           const ny = Math.max(padTop - panY, Math.min(H - padBottom - panY, event.y));
           nd.x = nx;
@@ -208,7 +195,6 @@ export default function Graph({ path, selectedChunkId, onNodeClick, domains = []
       .on('mouseenter', (event, d) => {
         tooltip.style('opacity', 1).html(
           `<div style="font-weight:600;color:${d.color};margin-bottom:3px;font-size:11px">${d.fullTitle}</div>
-           <div style="color:#9ca3af;margin-bottom:3px">${d.domain}</div>
            <div style="color:#6b7280;font-size:10px">step ${d.stepIndex + 1} · sim ${d.similarity.toFixed(3)}</div>`
         );
       })

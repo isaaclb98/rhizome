@@ -1,24 +1,5 @@
 import { useRef, useEffect } from 'react';
 
-const DOMAIN_COLORS = {
-  Modernism: '#6366f1',
-  Postmodernism: '#a855f7',
-  'Critical theory': '#f97316',
-  Unknown: '#6b7280',
-};
-
-function DomainBadge({ domain }) {
-  const color = DOMAIN_COLORS[domain] || DOMAIN_COLORS.Unknown;
-  return (
-    <span
-      className="inline-block px-1.5 py-0.5 rounded text-xs font-medium flex-shrink-0"
-      style={{ backgroundColor: `${color}20`, color }}
-    >
-      {domain}
-    </span>
-  );
-}
-
 function PathItem({ step, index, isSelected, onClick }) {
   return (
     <div
@@ -39,7 +20,6 @@ function PathItem({ step, index, isSelected, onClick }) {
             <span className="text-sm font-medium text-gray-200 leading-tight select-text">
               {step.article_title}
             </span>
-            <DomainBadge domain={step.domain} />
           </div>
           <p className="text-xs text-gray-400 leading-relaxed select-text">
             {step.text}
