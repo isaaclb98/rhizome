@@ -10,7 +10,7 @@ from rhizome.corpus.chunker import Chunker
 from rhizome.embedder.factory import get_embedder
 from rhizome.vectorstore.collection import CollectionManager
 
-BATCH_SIZE = 100
+BATCH_SIZE = 50
 LOG_EVERY = 50  # log every N articles ingested
 
 
@@ -103,10 +103,7 @@ def ingest(categories: str | None):
     start_ingest = time.monotonic()
 
     try:
-        for chunk in ingester.ingest():
-            # Skip articles already ingested (checkpoint is the source of truth)
-            if chunk.article_title in checkpoint:
-                continue
+        for chunk in ingester.ingest(skip_titles=checkpoint):
 
             batch_chunks.append(chunk)
             batch_texts.append(chunk.text)

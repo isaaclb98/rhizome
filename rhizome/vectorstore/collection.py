@@ -1,6 +1,7 @@
 """Qdrant collection management: create, upsert, delete."""
 
 import hashlib
+import time
 import uuid
 
 from qdrant_client import QdrantClient
@@ -58,13 +59,19 @@ class CollectionManager:
         collection_name: str,
         chunks: list[Chunk],
         vectors: list[list[float]],
+        max_retries: int = 3,
     ):
         """Insert or update chunks with their embedding vectors.
+
+        Retries on transient Qdrant errors (timeout, connection reset) with
+        exponential backoff. Qdrant upsert is idempotent per point ID, so
+        retrying is safe.
 
         Args:
             collection_name: Name of the collection.
             chunks: List of Chunk objects.
             vectors: List of embedding vectors (same order as chunks).
+            max_retries: Number of retry attempts on transient failures.
 
         Raises:
             ValueError: If number of chunks doesn't match number of vectors.
@@ -86,10 +93,20 @@ class CollectionManager:
             for chunk, vector in zip(chunks, vectors)
         ]
 
-        self.client.upsert(
-            collection_name=collection_name,
-            points=points,
-        )
+        last_error: Exception | None = None
+        for attempt in range(max_retries):
+            try:
+                self.client.upsert(
+                    collection_name=collection_name,
+                    points=points,
+                )
+                return
+            except Exception as e:
+                last_error = e
+                if attempt < max_retries - 1:
+                    wait = (2 ** attempt) * 2
+                    time.sleep(wait)
+        raise last_error from None
 
     def collection_exists(self, collection_name: str) -> bool:
         """Check if a collection exists."""
