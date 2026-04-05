@@ -59,7 +59,7 @@ class WikipediaIngester:
         self.chunker = chunker or Chunker()
         self.depth = depth
 
-    def ingest(self) -> Iterator[Chunk]:
+    def ingest(self, skip_titles: set[str] | None = None) -> Iterator[Chunk]:
         """Fetch articles and yield all chunks.
 
         Yields:
@@ -69,8 +69,11 @@ class WikipediaIngester:
             IngesterError: If the Wikipedia API lookup fails or
                           PetScan is unreachable.
         """
+        skip_titles = skip_titles if skip_titles is not None else set()
         titles = self._discover_articles()
         for title in titles:
+            if title in skip_titles:
+                continue
             try:
                 article_text = self._fetch_article(title)
                 if article_text is None:
