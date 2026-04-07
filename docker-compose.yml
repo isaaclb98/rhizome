@@ -1,9 +1,13 @@
 # Production-compose: uses pre-built image from DockerHub
 #
-#   docker compose up -d
+#   cp .env.example .env    # first run only — then edit .env with your values
+#   docker compose up -d    # starts qdrant + API on :8000
+#
+# Config vars are loaded from .env (create from .env.example if missing).
+# Any var absent from .env falls back to the ${VAR:-default} defaults below.
+# Secrets (OPENAI_API_KEY, QDRANT_API_KEY) have no defaults and MUST be set in .env.
 #
 # For local development with hot-reload, use docker-compose.dev.yml instead:
-#
 #   docker compose -f docker-compose.dev.yml up --build
 #
 services:
@@ -15,9 +19,13 @@ services:
       QDRANT_URL: "${QDRANT_URL:-http://qdrant:6333}"
       QDRANT_COLLECTION: "${QDRANT_COLLECTION:-modernity-v1}"
       EMBEDDER_TYPE: "${EMBEDDER_TYPE:-openai}"
+    # Override image CMD so compose controls the exact runtime (uvicorn for API, not the CLI)
+    command: ["uvicorn", "rhizome.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8000:8000"
     env_file:
       - path: .env
-        required: false
+        required: true
 
   qdrant:
     image: qdrant/qdrant:latest

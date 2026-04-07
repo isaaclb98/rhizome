@@ -11,7 +11,7 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: '/app/visualizer/static',
+    outDir: process.env.VITE_OUTPUT_DIR || '/app/visualizer/static',
     emptyOutDir: true,
   },
 });

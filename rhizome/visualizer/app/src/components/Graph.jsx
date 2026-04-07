@@ -1,11 +1,12 @@
 import { useEffect, useRef, useMemo, useCallback } from 'react';
 import * as d3 from 'd3';
 
-const NODE_COLOR = '#6366f1';  // single color for all nodes
+// Uses CSS var --node-color set by data-theme on document root
 
 export default function Graph({ path, selectedChunkId, onNodeClick }) {
   const svgRef = useRef(null);
   const containerRef = useRef(null);
+  const zoomRef = useRef(null);  // store zoom behavior for programmatic control
 
   const { nodes, pathEdges, knnEdges } = useMemo(() => {
     const nodes = path.map((step, i) => ({
@@ -14,7 +15,7 @@ export default function Graph({ path, selectedChunkId, onNodeClick }) {
         ? step.article_title.slice(0, 20) + '…'
         : step.article_title,
       fullTitle: step.article_title,
-      color: NODE_COLOR,
+      color: 'var(--node-color)',
       stepIndex: i,
       forced_jump: step.forced_jump,
       similarity: step.similarity,
@@ -65,7 +66,7 @@ export default function Graph({ path, selectedChunkId, onNodeClick }) {
     svg.append('defs').append('clipPath').attr('id', clipId)
       .append('rect').attr('width', W).attr('height', H);
 
-    // Pan group — all content goes here
+    // Pan+zoom group — all content goes here
     const panGroup = svg.append('g').attr('clip-path', `url(#${clipId})`);
 
     const padTop = 20, padBottom = 20;
@@ -86,14 +87,14 @@ export default function Graph({ path, selectedChunkId, onNodeClick }) {
     // Edges
     const knnLine = panGroup.append('g')
       .selectAll('line').data(knnEdges).join('line')
-      .attr('stroke', '#3f4155').attr('stroke-width', 0.5)
+      .attr('stroke', 'var(--border-color)').attr('stroke-width', 0.5)
       .attr('opacity', 0.35).attr('stroke-dasharray', '2,3')
       .attr('x1', (d) => getX(d.source)).attr('y1', (d) => getY(d.source))
       .attr('x2', (d) => getX(d.target)).attr('y2', (d) => getY(d.target));
 
     const pathLine = panGroup.append('g')
       .selectAll('line').data(pathEdges).join('line')
-      .attr('stroke', '#525766')
+      .attr('stroke', 'var(--text-muted)')
       .attr('stroke-width', 1)
       .attr('opacity', 0.9)
       .attr('x1', (d) => getX(d.source)).attr('y1', (d) => getY(d.source))
@@ -112,7 +113,7 @@ export default function Graph({ path, selectedChunkId, onNodeClick }) {
     node.append('circle')
       .attr('r', 7)
       .attr('fill', (d) => d.color)
-      .attr('stroke', (d) => d.id === selectedChunkId ? '#fff' : '#0f1117')
+      .attr('stroke', (d) => d.id === selectedChunkId ? 'var(--bg-primary)' : 'var(--border-color)')
       .attr('stroke-width', (d) => d.id === selectedChunkId ? 2.5 : 1.5)
       .attr('opacity', 0.95);
 
@@ -120,36 +121,29 @@ export default function Graph({ path, selectedChunkId, onNodeClick }) {
       .attr('text-anchor', 'middle').attr('dominant-baseline', 'central')
       .attr('fill', '#fff').attr('font-size', '7px')
       .attr('font-weight', '600')
-      .attr('font-family', 'ui-sans-serif, system-ui, sans-serif')
+      .attr('font-family', 'JetBrains Mono, ui-monospace, monospace')
       .text((d) => d.stepIndex + 1);
 
     node.append('text')
       .attr('dx', 11).attr('dy', 3)
-      .attr('fill', '#9ca3af').attr('font-size', '9px')
-      .attr('font-family', 'ui-sans-serif, system-ui, sans-serif')
+      .attr('fill', 'var(--text-muted)').attr('font-size', '9px')
+      .attr('font-family', 'Inter, ui-sans-serif, system-ui, sans-serif')
       .text((d) => d.label);
 
-    // Drag: pan the whole graph (on SVG background)
-    let panX = 0, panY = 0;
-    let dragging = false;
+    // Zoom behavior
+    const zoom = d3.zoom()
+      .scaleExtent([0.5, 4])
+      .on('zoom', (event) => {
+        panGroup.attr('transform', event.transform);
+      });
 
-    svg.call(
-      d3.drag()
-        .on('start', function(event) {
-          dragging = true;
-          event.sourceEvent.stopPropagation();
-        })
-        .on('drag', function(event) {
-          panX += event.dx;
-          panY += event.dy;
-          panGroup.attr('transform', `translate(${panX},${panY})`);
-        })
-        .on('end', function() {
-          dragging = false;
-        })
-    );
+    zoomRef.current = zoom;
+    svg.call(zoom);
 
-    // Also make nodes draggable (individual node drag)
+    // Initial mount: fixed scale 1.5, no centering
+    svg.call(zoom.transform, d3.zoomIdentity.scale(1.5));
+
+    // Node drag: individual node repositioning using SVG-space coords (d3.pointer)
     node.call(
       d3.drag()
         .on('start', function(event) {
@@ -158,8 +152,10 @@ export default function Graph({ path, selectedChunkId, onNodeClick }) {
         .on('drag', function(event, d) {
           const nd = nodeById.get(d.id);
           if (!nd) return;
-          const nx = Math.max(-panX, Math.min(W - panX, event.x));
-          const ny = Math.max(padTop - panY, Math.min(H - padBottom - panY, event.y));
+          // d3.pointer gives SVG-space coords regardless of active zoom transform
+          const [svgX, svgY] = d3.pointer(event, svgRef.current);
+          const nx = Math.max(0, Math.min(W, svgX));
+          const ny = Math.max(padTop, Math.min(H - padBottom, svgY));
           nd.x = nx;
           nd.y = ny;
           refreshPositions();
@@ -184,11 +180,11 @@ export default function Graph({ path, selectedChunkId, onNodeClick }) {
       .selectAll('.graph-tooltip').data([null]).join('div')
       .attr('class', 'graph-tooltip')
       .style('position', 'absolute').style('pointer-events', 'none')
-      .style('opacity', 0).style('background', '#1a1d27')
-      .style('border', '1px solid #3f4155').style('border-radius', '6px')
+      .style('opacity', 0).style('background', 'var(--bg-secondary)')
+      .style('border', '1px solid var(--border-color)').style('border-radius', '6px')
       .style('padding', '8px 12px').style('font-size', '11px')
-      .style('color', '#e5e7eb').style('max-width', '220px')
-      .style('box-shadow', '0 4px 12px rgba(0,0,0,0.5)')
+      .style('color', 'var(--text-primary)').style('max-width', '220px')
+      .style('box-shadow', '0 4px 12px rgba(0,0,0,0.15)')
       .style('z-index', 20);
 
     node
@@ -213,6 +209,38 @@ export default function Graph({ path, selectedChunkId, onNodeClick }) {
     svg.on('click', () => onNodeClick(null));
   }, [nodes, pathEdges, knnEdges, selectedChunkId, onNodeClick]);
 
+  // When selectedChunkId changes, animate view to center the clicked node
+  useEffect(() => {
+    if (!selectedChunkId || !svgRef.current || !containerRef.current) return;
+    if (!zoomRef.current) return;
+
+    const container = containerRef.current;
+    const rect = container.getBoundingClientRect();
+    const W = Math.round(rect.width);
+    const H = Math.round(rect.height);
+
+    // Find the node position
+    const stepIndex = nodes.findIndex((n) => n.id === selectedChunkId);
+    if (stepIndex === -1) return;
+
+    const padTop = 20, padBottom = 20;
+    const usableH = H - padTop - padBottom;
+    const cx = W / 2;
+    const nodeY = padTop + (stepIndex / Math.max(nodes.length - 1, 1)) * usableH;
+
+    // Get current zoom state
+    const svg = d3.select(svgRef.current);
+    const currentTransform = d3.zoomTransform(svgRef.current);
+    const currentScale = currentTransform.k;
+
+    // Center node at viewport center, preserving current zoom scale
+    const targetTransform = d3.zoomIdentity
+      .translate(W / 2 - cx, H / 2 - nodeY)
+      .scale(currentScale);
+
+    svg.transition().duration(300).call(zoomRef.current.transform, targetTransform);
+  }, [selectedChunkId, nodes]);
+
   useEffect(() => {
     drawGraph();
 
@@ -225,8 +253,8 @@ export default function Graph({ path, selectedChunkId, onNodeClick }) {
   return (
     <div ref={containerRef} className="flex-1 relative overflow-hidden bg-bg-primary">
       <svg ref={svgRef} style={{ display: 'block', width: '100%', height: '100%' }} />
-      <div className="absolute bottom-2 right-2 text-[10px] text-gray-600 pointer-events-none select-none">
-        drag to pan
+      <div className="absolute bottom-2 right-2 text-[10px] text-text-muted pointer-events-none select-none">
+        scroll to zoom · drag to pan
       </div>
     </div>
   );

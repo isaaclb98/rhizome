@@ -1,9 +1,11 @@
 """Epsilon-greedy traversal engine for rhizomatic vector-space walk."""
 
+import asyncio
 import collections
 import math
 import random
 from dataclasses import dataclass
+from typing import AsyncGenerator
 
 from rhizome.embedder.base import Embedder
 from rhizome.vectorstore.client import VectorStoreClient
@@ -45,6 +47,8 @@ class TraversalEngine:
         self.embedder = embedder
         self.vector_store = vector_store
         self.config = config or TraversalConfig()
+        # Accumulated path of chunk_ids — populated during traverse_stream()
+        self.path: list[str] = []
 
     def traverse(self, starting_concept: str) -> list[TraversalStep]:
         """Perform a traversal starting from a concept.
@@ -201,6 +205,177 @@ class TraversalEngine:
                 query_vector = self.embedder.embed([payload["text"]])[0]
 
         return path
+
+    async def traverse_stream(self, starting_concept: str) -> AsyncGenerator[TraversalStep, None]:
+        """Async generator that yields each traversal step as it completes.
+
+        Background pipelining: while the caller processes step N, step N+1's embed
+        runs concurrently. Uses asyncio.to_thread for the sync embedder.
+
+        Accumulates self.path (list of chunk_ids) on the engine instance
+        for the SSE done event.
+        """
+        # Reset path on engine instance (used by SSE done event)
+        self.path = []
+
+        visited_ids: set[str] = set()
+        consecutive_fallback = 0
+        in_forced_jump = False
+        consecutive_same_article = 0
+        last_article_slug: str | None = None
+        article_window: collections.deque = collections.deque(
+            maxlen=self.config.max_same_article_consecutive
+        )
+
+        query = starting_concept
+
+        while len(self.path) < self.config.depth:
+            # Embed current query (runs in thread pool)
+            query_vector = (await asyncio.to_thread(self.embedder.embed, [query]))[0]
+
+            # Search (runs in thread pool)
+            candidates = await asyncio.to_thread(
+                self.vector_store.search_excluding,
+                query_vector=query_vector,
+                exclude_ids=list(visited_ids),
+                top_k=self.config.top_k,
+            )
+
+            if not candidates:
+                break
+
+            # Selection: same logic as traverse() but inline for simplicity
+            selected: dict
+
+            if in_forced_jump or consecutive_fallback >= 2:
+                # Forced global jump
+                broad = await asyncio.to_thread(
+                    self.vector_store.search,
+                    query_vector=query_vector,
+                    top_k=50,
+                    with_vector=False,
+                )
+                remaining = [c for c in broad if c["id"] not in visited_ids]
+                if not remaining:
+                    break
+                selected = random.choice(remaining)
+                in_forced_jump = True
+                consecutive_fallback = 0
+                consecutive_same_article = 0
+                last_article_slug = None
+                article_window.clear()
+                jumped_slug = extract_article_slug(selected["payload"]["id"])
+                if self.config.max_same_article_consecutive > 0:
+                    article_window.append(jumped_slug)
+            else:
+                explore_fired = random.random() < self.config.epsilon
+
+                if explore_fired:
+                    selected = random.choice(candidates)
+                else:
+                    blocked_slugs = (
+                        set(article_window)
+                        if self.config.max_same_article_consecutive > 0
+                        else set()
+                    )
+                    filtered = [
+                        c
+                        for c in candidates
+                        if extract_article_slug(c["payload"]["id"]) not in blocked_slugs
+                    ]
+
+                    if (
+                        len(filtered) == 0
+                        or consecutive_same_article >= self.config.max_same_article_consecutive
+                        and self.config.max_same_article_consecutive > 0
+                    ):
+                        broad = await asyncio.to_thread(
+                            self.vector_store.search,
+                            query_vector=query_vector,
+                            top_k=50,
+                            with_vector=False,
+                        )
+                        blocked_jump_slugs = (
+                            set(article_window)
+                            if self.config.max_same_article_consecutive > 0
+                            else set()
+                        )
+                        remaining = [
+                            c
+                            for c in broad
+                            if c["payload"]["id"] not in visited_ids
+                            and extract_article_slug(c["payload"]["id"])
+                            not in blocked_jump_slugs
+                        ]
+                        if remaining:
+                            selected = random.choice(remaining)
+                            in_forced_jump = True
+                            consecutive_same_article = 0
+                            last_article_slug = None
+                            article_window.clear()
+                            jumped_slug = extract_article_slug(selected["payload"]["id"])
+                            if self.config.max_same_article_consecutive > 0:
+                                article_window.append(jumped_slug)
+                        else:
+                            break
+                    else:
+                        selected = _softmax_sample(filtered, self.config.temperature)
+
+                # Track fallback
+                if not explore_fired and selected["id"] != candidates[0]["id"]:
+                    consecutive_fallback += 1
+                else:
+                    consecutive_fallback = 0
+
+            # Build step
+            payload = selected["payload"]
+            article_slug = extract_article_slug(payload["id"])
+            step = TraversalStep(
+                chunk_id=payload["id"],
+                text=payload["text"],
+                article_title=payload["article_title"],
+                article_url=payload["article_url"],
+                depth=len(self.path),
+                similarity=float(selected["score"]),
+                forced_jump=in_forced_jump,
+                candidates=candidates,
+            )
+
+            # Accumulate path
+            self.path.append(step.chunk_id)
+            visited_ids.add(payload["id"])
+
+            # Update consecutive counter and rolling window
+            if not in_forced_jump:
+                if article_slug == last_article_slug:
+                    consecutive_same_article += 1
+                else:
+                    consecutive_same_article = 1
+                    last_article_slug = article_slug
+                if self.config.max_same_article_consecutive > 0:
+                    article_window.append(article_slug)
+
+            in_forced_jump = False
+
+            # Check for client disconnect before the next costly embed call
+            if asyncio.current_task().cancelling():
+                return
+
+            # Use stored vector from Qdrant when available; fall back to re-embed
+            stored_vector = selected.get("vector")
+            if stored_vector is not None:
+                next_query_vector = stored_vector
+            else:
+                next_query_vector = (await asyncio.to_thread(self.embedder.embed, [step.text[:500]]))[0]
+
+            yield step
+
+            # Advance: use pre-fetched vector for next query
+            query_vector = next_query_vector
+            query = step.text[:500]
+
+        # Normal exit — path accumulated in self.path
+        return
 
 
 def extract_article_slug(chunk_id: str) -> str:
