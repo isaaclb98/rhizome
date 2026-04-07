@@ -357,10 +357,6 @@ class TraversalEngine:
 
             in_forced_jump = False
 
-            # Check for client disconnect before the next costly embed call
-            if asyncio.current_task().cancelling():
-                return
-
             # Use stored vector from Qdrant when available; fall back to re-embed
             stored_vector = selected.get("vector")
             if stored_vector is not None:
