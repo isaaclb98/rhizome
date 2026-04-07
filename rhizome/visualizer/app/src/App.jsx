@@ -1,13 +1,13 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import Controls from './components/Controls.jsx';
 import Graph from './components/Graph.jsx';
 import PathPanel from './components/PathPanel.jsx';
 
 const DEFAULT_PARAMS = {
   query: 'the tension between modernism and postmodernism',
-  depth: 8,
+  depth: 20,
   epsilon: 0.1,
-  top_k: 20,
+  top_k: 30,
   temperature: 1.0,
   max_same_article_consecutive: 2,
 };
@@ -17,19 +17,48 @@ export default function App() {
   const [stats, setStats] = useState(null);
   const [selectedChunkId, setSelectedChunkId] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState(null);
   const [params, setParams] = useState(DEFAULT_PARAMS);
+  const abortControllerRef = useRef(null);
+  const forcedJumpsRef = useRef(0);
 
-  const handleTraverse = useCallback(async (requestParams) => {
+  // Theme: default light, read from localStorage on mount
+  useEffect(() => {
+    const stored = localStorage.getItem('rhizome-theme');
+    const initial = stored || 'light';
+    document.documentElement.setAttribute('data-theme', initial);
+  }, []);
+
+  const handleStreamTraverse = useCallback(async (requestParams) => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setIsLoading(true);
+    setIsStreaming(true);
     setError(null);
     setSelectedChunkId(null);
+    setPath([]);
+    forcedJumpsRef.current = 0;
+    setStats({
+      depth: requestParams.depth,
+      epsilon: requestParams.epsilon,
+      top_k: requestParams.top_k,
+      temperature: requestParams.temperature,
+      max_same_article_consecutive: requestParams.max_same_article_consecutive,
+      forced_jumps: 0,
+    });
+    setParams(requestParams);
 
     try {
-      const response = await fetch('/traverse', {
+      const response = await fetch('/traverse/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestParams),
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -37,16 +66,83 @@ export default function App() {
         throw new Error(err.detail || `HTTP ${response.status}`);
       }
 
-      const data = await response.json();
-      setPath(data.path);
-      setStats(data.stats);
-      setParams(requestParams);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const raw = line.slice(6);
+          if (!raw.trim()) continue;
+
+          let data;
+          try {
+            data = JSON.parse(raw);
+          } catch {
+            continue;
+          }
+
+          if (data.type === 'step') {
+            if (data.forced_jump) {
+              forcedJumpsRef.current += 1;
+              setStats((prev) =>
+                prev ? { ...prev, forced_jumps: forcedJumpsRef.current } : prev
+              );
+            }
+            const step = {
+              chunk_id: data.chunk_id,
+              text: data.text,
+              article_title: data.article_title,
+              article_url: data.article_url || '',
+              depth: data.depth,
+              similarity: data.similarity,
+              forced_jump: data.forced_jump,
+              candidates: data.candidates || [],
+            };
+            setPath((prev) => {
+              if (prev.some((s) => s.chunk_id === step.chunk_id)) return prev;
+              return [...prev, step];
+            });
+          } else if (data.type === 'done') {
+            setStats((prev) =>
+              prev ? { ...prev, forced_jumps: forcedJumpsRef.current } : prev
+            );
+            setIsStreaming(false);
+            setIsLoading(false);
+          } else if (data.type === 'error') {
+            if (data.code === 'ABORTED') {
+              // Client disconnect — silent
+              setIsStreaming(false);
+              setIsLoading(false);
+            } else {
+              setError(data.message || 'Traversal error');
+              setIsStreaming(false);
+              setIsLoading(false);
+            }
+          }
+        }
+      }
     } catch (err) {
+      if (err.name === 'AbortError' || err.message === 'The user aborted a request.') {
+        setIsStreaming(false);
+        setIsLoading(false);
+        return;
+      }
       setError(err.message || 'Traversal failed');
       setPath([]);
       setStats(null);
+      setIsStreaming(false);
     } finally {
       setIsLoading(false);
+      setIsStreaming(false);
     }
   }, []);
 
@@ -55,19 +151,28 @@ export default function App() {
     setSelectedChunkId((prev) => (prev === id ? prev : id));
   }, []);
 
+  // Abort on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
   return (
     <div className="flex flex-col h-screen bg-bg-primary overflow-hidden">
       {/* Header */}
-      <header className="flex-none border-b border-bg-tertiary px-4 py-3">
+      <header className="flex-none border-b border-border px-4 py-3">
         <div className="flex items-center gap-3 mb-3">
-          <h1 className="text-2xl font-bold tracking-tight text-white">
+          <h1 className="text-2xl font-bold tracking-tight text-text-primary">
             Rhizome
           </h1>
-          <span className="text-xs text-gray-500 font-mono">
+          <span className="text-xs text-text-muted font-mono">
             Wikipedia semantic traversal
           </span>
         </div>
-        <Controls params={params} onTraverse={handleTraverse} isLoading={isLoading} />
+        <Controls params={params} onTraverse={handleStreamTraverse} isLoading={isLoading} />
       </header>
 
       {/* Error banner */}
@@ -88,8 +193,8 @@ export default function App() {
           />
         </div>
 
-        {/* Right: graph strip — always visible on desktop, collapses on mobile */}
-        <div className="hidden lg:flex lg:flex-col lg:w-80 xl:w-96 border-l border-bg-tertiary overflow-hidden flex-shrink-0">
+        {/* Right: graph strip */}
+        <div className="hidden lg:flex lg:flex-col lg:w-80 xl:w-96 border-l border-border overflow-hidden flex-shrink-0">
           {path.length > 0 ? (
             <Graph
               path={path}
@@ -98,7 +203,7 @@ export default function App() {
             />
           ) : (
             <div className="relative flex-1">
-              <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-600 text-xs text-center gap-2">
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-text-muted text-xs text-center gap-2">
                 <span>Graph appears here</span>
                 <span>after traversal</span>
               </div>
@@ -109,31 +214,31 @@ export default function App() {
 
       {/* Footer */}
       {stats && (
-        <footer className="flex-none border-t border-bg-tertiary px-4 py-1.5 flex items-center gap-4 text-xs text-gray-500">
+        <footer className="flex-none border-t border-border px-4 py-1.5 flex items-center gap-4 text-xs text-text-muted">
           <div className="flex items-center gap-1.5">
             <span>Depth</span>
-            <span className="text-gray-300">{stats.depth}</span>
+            <span className="text-text-primary">{stats.depth}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span>ε</span>
-            <span className="text-gray-300">{stats.epsilon}</span>
+            <span className="text-text-primary">{stats.epsilon}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span>top_k</span>
-            <span className="text-gray-300">{stats.top_k}</span>
+            <span className="text-text-primary">{stats.top_k}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span>temp</span>
-            <span className="text-gray-300">{stats.temperature}</span>
+            <span className="text-text-primary">{stats.temperature}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span>same-art</span>
-            <span className="text-gray-300">{stats.max_same_article_consecutive}</span>
+            <span className="text-text-primary">{stats.max_same_article_consecutive}</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="text-orange-400">●</span>
+            <span className="text-accent">●</span>
             <span>Forced jumps</span>
-            <span className="text-gray-300">{stats.forced_jumps}</span>
+            <span className="text-text-primary">{stats.forced_jumps}</span>
           </div>
         </footer>
       )}

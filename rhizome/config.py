@@ -64,8 +64,8 @@ class RhizomeConfig(BaseSettings):
     )
 
     # Corpus / traversal
-    wikipedia_categories: list[str] = Field(
-        default=["Modernism", "Postmodernism", "Critical theory"],
+    wikipedia_categories: str = Field(
+        default="Modernism,Postmodernism,Critical theory",
         alias="WIKIPEDIA_CATEGORIES",
     )
     wikipedia_depth: int = Field(default=1, alias="WIKIPEDIA_DEPTH")
@@ -96,12 +96,12 @@ class RhizomeConfig(BaseSettings):
             return os.environ.get(env_name)
         return v
 
-    @field_validator("wikipedia_categories", mode="before")
+    @field_validator("wikipedia_categories", "hf_model", mode="before")
     @classmethod
-    def parse_comma_separated(cls, v: str | list[str]) -> list[str]:
-        """Parse comma-separated string into list of categories."""
-        if isinstance(v, str):
-            return [c.strip() for c in v.split(",") if c.strip()]
+    def parse_comma_separated(cls, v: str | list[str]) -> str:
+        """Parse comma-separated string into list of categories; keep as string for Pydantic."""
+        if isinstance(v, list):
+            return ",".join(v)
         return v
 
     @field_validator("embedder_type", mode="before")
