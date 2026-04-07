@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 
 export default function Controls({ params, onTraverse, isLoading }) {
   const [query, setQuery] = useState(params.query);
@@ -7,24 +7,6 @@ export default function Controls({ params, onTraverse, isLoading }) {
   const [topK, setTopK] = useState(params.top_k);
   const [temperature, setTemperature] = useState(params.temperature);
   const [maxSameArticle, setMaxSameArticle] = useState(params.max_same_article_consecutive);
-
-  // Read theme from the document root (set by App on mount) to avoid read race
-  const [theme, setTheme] = useState(() => document.documentElement.getAttribute('data-theme') || 'light');
-
-  useEffect(() => {
-    const observer = new MutationObserver(() => {
-      const t = document.documentElement.getAttribute('data-theme');
-      if (t) setTheme(t);
-    });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-    return () => observer.disconnect();
-  }, []);
-
-  const toggleTheme = useCallback(() => {
-    const next = theme === 'light' ? 'dark' : 'light';
-    document.documentElement.setAttribute('data-theme', next);
-    localStorage.setItem('rhizome-theme', next);
-  }, [theme]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -146,32 +128,6 @@ export default function Controls({ params, onTraverse, isLoading }) {
           disabled={isLoading}
         />
       </div>
-
-      {/* Theme toggle */}
-      <button
-        type="button"
-        onClick={toggleTheme}
-        className="px-3 py-2 text-sm text-text-muted hover:text-text-primary border border-border rounded transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-        title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
-      >
-        {theme === 'light' ? (
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-          </svg>
-        ) : (
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="5"/>
-            <line x1="12" y1="1" x2="12" y2="3"/>
-            <line x1="12" y1="21" x2="12" y2="23"/>
-            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
-            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-            <line x1="1" y1="12" x2="3" y2="12"/>
-            <line x1="21" y1="12" x2="23" y2="12"/>
-            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
-            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-          </svg>
-        )}
-      </button>
 
       {/* Submit */}
       <button
