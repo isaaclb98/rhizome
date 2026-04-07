@@ -154,38 +154,6 @@ export default function Graph({ path, selectedChunkId, onNodeClick, depth }) {
       svg.call(zoom.transform, d3.zoomIdentity.scale(1.5));
     }
 
-    // Node drag: individual node repositioning using SVG-space coords (d3.pointer)
-    node.call(
-      d3.drag()
-        .on('start', function(event) {
-          event.sourceEvent.stopPropagation();
-        })
-        .on('drag', function(event, d) {
-          const nd = nodeById.get(d.id);
-          if (!nd) return;
-          // d3.pointer gives SVG-space coords regardless of active zoom transform
-          const [svgX, svgY] = d3.pointer(event, svgRef.current);
-          const nx = Math.max(0, Math.min(W, svgX));
-          const ny = Math.max(padTop, Math.min(H - padBottom, svgY));
-          nd.x = nx;
-          nd.y = ny;
-          refreshPositions();
-        })
-    );
-
-    function refreshPositions() {
-      knnLine
-        .attr('x1', (e) => getX(e.source)).attr('y1', (e) => getY(e.source))
-        .attr('x2', (e) => getX(e.target)).attr('y2', (e) => getY(e.target));
-      pathLine
-        .attr('x1', (e) => getX(e.source)).attr('y1', (e) => getY(e.source))
-        .attr('x2', (e) => getX(e.target)).attr('y2', (e) => getY(e.target));
-      node.attr('transform', (d) => {
-        const nd = nodeById.get(d.id);
-        return `translate(${nd?.x ?? 0},${nd?.y ?? 0})`;
-      });
-    }
-
     // Tooltip
     const tooltip = d3.select(container)
       .selectAll('.graph-tooltip').data([null]).join('div')
