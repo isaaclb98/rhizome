@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.0 - 2026-04-07
+
+### Features
+- **Categories display** — The Wikipedia categories used for traversal are now shown in the UI header after each traversal completes
+- **SSE cancellation fix** — When a client disconnects mid-traversal, the API now sends a `done` event with the partial path so the UI can clean up its streaming state instead of hanging indefinitely
+
+### Bug Fixes
+- **Fixed-slot graph layout** — Graph nodes are no longer draggable and maintain equal vertical spacing regardless of traversal depth
+- **Forced jumps counter** — SSE stream now accurately reports forced jumps from the server-side counter rather than relying on client-side ref
+
+### Maintenance
+- Removed stale `config.yaml` and `rhizome/k8s/` deployment manifest
+
 ## 0.5.0 (2026-04-04)
 
 ### Breaking Changes
