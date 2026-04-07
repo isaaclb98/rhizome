@@ -140,8 +140,18 @@ export default function Graph({ path, selectedChunkId, onNodeClick }) {
     zoomRef.current = zoom;
     svg.call(zoom);
 
-    // Initial mount: fixed scale 1.5, no centering
-    svg.call(zoom.transform, d3.zoomIdentity.scale(1.5));
+    // Initial mount: center the last node at viewport center, scale 1.5
+    if (nodes.length > 0) {
+      const lastNode = nodes[nodes.length - 1];
+      const lastNd = nodeById.get(lastNode.id);
+      if (lastNd) {
+        const centerTx = W / 2 - 1.5 * lastNd.x;
+        const centerTy = H / 2 - 1.5 * lastNd.y;
+        svg.call(zoom.transform, d3.zoomIdentity.translate(centerTx, centerTy).scale(1.5));
+      }
+    } else {
+      svg.call(zoom.transform, d3.zoomIdentity.scale(1.5));
+    }
 
     // Node drag: individual node repositioning using SVG-space coords (d3.pointer)
     node.call(
@@ -235,7 +245,7 @@ export default function Graph({ path, selectedChunkId, onNodeClick }) {
 
     // Center node at viewport center, preserving current zoom scale
     const targetTransform = d3.zoomIdentity
-      .translate(W / 2 - cx, H / 2 - nodeY)
+      .translate(W / 2 - currentScale * cx, H / 2 - currentScale * nodeY)
       .scale(currentScale);
 
     svg.transition().duration(300).call(zoomRef.current.transform, targetTransform);
