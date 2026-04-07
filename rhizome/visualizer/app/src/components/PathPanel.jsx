@@ -5,33 +5,33 @@ function PathItem({ step, index, isSelected, onClick }) {
     <div
       onClick={onClick}
       className={`w-full text-left px-3 py-2.5 border-b border-bg-tertiary transition-colors cursor-pointer ${
-        isSelected ? 'bg-bg-tertiary border-l-2 border-l-blue-500' : 'hover:bg-bg-secondary'
+        isSelected ? 'bg-bg-tertiary border-l-2 border-l-accent' : 'hover:bg-bg-secondary'
       }`}
       style={{ userSelect: 'text' }}
     >
       <div className="flex items-start gap-2">
         <span className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold mt-0.5 ${
-          isSelected ? 'bg-blue-600 text-white' : 'bg-bg-tertiary text-gray-400'
+          isSelected ? 'bg-accent text-white' : 'bg-bg-tertiary text-text-muted'
         }`}>
           {index + 1}
         </span>
         <div className="flex-1 min-w-0 select-text">
           <div className="flex items-center gap-1.5 flex-wrap mb-1">
-            <span className="text-sm font-medium text-gray-200 leading-tight select-text">
+            <span className="text-sm font-medium text-text-primary leading-tight select-text">
               {step.article_title}
             </span>
           </div>
-          <p className="text-xs text-gray-400 leading-relaxed select-text">
+          <p className="text-xs text-text-muted leading-relaxed select-text">
             {step.text}
           </p>
           {isSelected && (
-            <div className="mt-2 flex items-center gap-3 text-xs text-gray-500">
-              <span>sim <span className="text-gray-400 font-mono select-text">{step.similarity.toFixed(4)}</span></span>
+            <div className="mt-2 flex items-center gap-3 text-xs text-text-muted">
+              <span>sim <span className="text-text-secondary font-mono select-text">{step.similarity.toFixed(4)}</span></span>
               <a
                 href={step.article_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="hover:text-gray-300 underline"
+                className="hover:text-text-primary underline"
               >
                 Wikipedia ↗
               </a>
@@ -56,16 +56,16 @@ export default function PathPanel({ path, selectedChunkId, onSelectChunk }) {
 
   if (path.length === 0) {
     return (
-      <aside className="h-full border-r border-bg-tertiary flex items-center justify-center bg-bg-primary">
-        <span className="text-gray-600 text-sm text-center px-6">Run a traversal to see the path</span>
+      <aside className="h-full border-r border-border flex items-center justify-center bg-bg-primary">
+        <span className="text-text-muted text-sm text-center px-6">Run a traversal to see the path</span>
       </aside>
     );
   }
 
   return (
-    <aside className="h-full border-r border-bg-tertiary flex flex-col bg-bg-primary">
-      <div className="flex-none px-3 py-2 border-b border-bg-tertiary bg-bg-secondary">
-        <div className="text-xs text-gray-400 font-medium">
+    <aside className="h-full border-r border-border flex flex-col bg-bg-primary">
+      <div className="flex-none px-3 py-2 border-b border-border bg-bg-secondary">
+        <div className="text-xs text-text-muted font-medium">
           Path — {path.length} chunks
         </div>
       </div>
