@@ -3,7 +3,8 @@
 ## 0.6.0 - 2026-04-07
 
 ### Features
-- **Categories display** — The Wikipedia categories used for traversal are now shown in the UI header after each traversal completes
+- **Categories display** — Wikipedia categories shown in the UI header before traversal begins, not just after; uses `·` separator
+- **Random example queries** — Refresh the page to see a different example query from a rotating set of 7 prompts
 - **SSE cancellation fix** — When a client disconnects mid-traversal, the API now sends a `done` event with the partial path so the UI can clean up its streaming state instead of hanging indefinitely
 
 ### Bug Fixes
