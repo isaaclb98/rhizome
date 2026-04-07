@@ -231,7 +231,7 @@ class TraversalEngine:
 
         while len(self.path) < self.config.depth:
             # Embed current query (runs in thread pool)
-            query_vector = await asyncio.to_thread(self.embedder.embed, [query])[0]
+            query_vector = (await asyncio.to_thread(self.embedder.embed, [query]))[0]
 
             # Search (runs in thread pool)
             candidates = await asyncio.to_thread(
@@ -366,7 +366,7 @@ class TraversalEngine:
             if stored_vector is not None:
                 next_query_vector = stored_vector
             else:
-                next_query_vector = await asyncio.to_thread(self.embedder.embed, [step.text[:500]])[0]
+                next_query_vector = (await asyncio.to_thread(self.embedder.embed, [step.text[:500]]))[0]
 
             yield step
 
