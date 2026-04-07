@@ -77,6 +77,7 @@ class TraversalStatsResponse(BaseModel):
     forced_jumps: int
     temperature: float
     max_same_article_consecutive: int
+    categories: str
 
 
 class TraverseResponse(BaseModel):
@@ -251,6 +252,7 @@ def traverse(req: TraverseRequest):
             forced_jumps=forced_jumps,
             temperature=req.temperature,
             max_same_article_consecutive=req.max_same_article_consecutive,
+            categories=_config.wikipedia_categories,
         ),
     )
 
@@ -295,14 +297,18 @@ async def traverse_stream(req: TraverseRequest):
     )
 
     async def event_generator():
+        forced_jumps = 0
         try:
             async for step in engine.traverse_stream(req.query):
+                if step.forced_jump:
+                    forced_jumps += 1
                 yield f"data: {json.dumps({'type':'step','depth':step.depth,'chunk_id':step.chunk_id,'text':step.text,'article_title':step.article_title,'article_url':step.article_url,'similarity':step.similarity,'forced_jump':step.forced_jump,'candidates':[{'chunk_id':c['id'],'text':c['payload']['text'],'article_title':c['payload']['article_title'],'article_url':c['payload']['article_url'],'similarity':float(c['score'])} for c in step.candidates]})}\n\n"
 
-            yield f"data: {json.dumps({'type':'done','path':engine.path})}\n\n"
+            yield f"data: {json.dumps({'type':'done','path':engine.path,'stats':{'depth':req.depth,'epsilon':req.epsilon,'top_k':req.top_k,'temperature':req.temperature,'max_same_article_consecutive':req.max_same_article_consecutive,'forced_jumps':forced_jumps,'categories':_config.wikipedia_categories}})}\n\n"
         except asyncio.CancelledError:
-            # Exit silently — FastAPI handles task cancellation at the response edge.
-            # Yielding after cancellation risks undefined StreamingResponse behavior.
+            # Yield a final done event so the client can clean up its streaming state.
+            # engine.path contains whatever was accumulated before cancellation.
+            yield f"data: {json.dumps({'type':'done','path':engine.path,'stats':{'depth':req.depth,'epsilon':req.epsilon,'top_k':req.top_k,'temperature':req.temperature,'max_same_article_consecutive':req.max_same_article_consecutive,'forced_jumps':forced_jumps,'categories':_config.wikipedia_categories}})}\n\n"
             return
 
     return StreamingResponse(
