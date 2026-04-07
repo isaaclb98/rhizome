@@ -3,15 +3,29 @@ export default {
   content: ['./index.html', './src/**/*.{js,jsx}'],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'sans-serif'],
+        mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+      },
       colors: {
-        modernism: '#6366f1',
-        postmodernism: '#a855f7',
-        critical: '#f97316',
-        unknown: '#6b7280',
+        modernism: 'var(--node-color)',
         bg: {
-          primary: '#0f1117',
-          secondary: '#1a1d27',
-          tertiary: '#252836',
+          primary: 'var(--bg-primary)',
+          secondary: 'var(--bg-secondary)',
+          tertiary: 'var(--bg-tertiary)',
+        },
+        text: {
+          primary: 'var(--text-primary)',
+          secondary: 'var(--text-secondary)',
+          muted: 'var(--text-muted)',
+        },
+        accent: {
+          DEFAULT: 'var(--accent)',
+          hover: 'var(--accent-hover)',
+        },
+        rust: '#c45d35',
+        border: {
+          DEFAULT: 'var(--border-color)',
         },
       },
     },

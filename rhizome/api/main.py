@@ -15,7 +15,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from rhizome.config import get_config
@@ -38,9 +38,9 @@ class TraverseRequest(BaseModel):
     """POST /traverse request body."""
 
     query: str = Field(..., min_length=1, max_length=500)
-    depth: int = Field(default=8, ge=1, le=20)
+    depth: int = Field(default=8, ge=1, le=100)
     epsilon: float = Field(default=0.1, ge=0.0, le=1.0)
-    top_k: int = Field(default=20, ge=1, le=20)
+    top_k: int = Field(default=20, ge=1, le=50)
     temperature: float = Field(default=1.0, ge=0.0, le=3.0)
     max_same_article_consecutive: int = Field(default=2, ge=0, le=20)
 
@@ -134,10 +134,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS for local development (Vite dev server on port 5173)
+# CORS — allowlist from env or default to localhost for dev
+_allow_origins = os.environ.get("CORS_ALLOWED_ORIGINS", "http://localhost:5173").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=[origin.strip() for origin in _allow_origins],
     allow_credentials=True,
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
@@ -251,6 +252,66 @@ def traverse(req: TraverseRequest):
             temperature=req.temperature,
             max_same_article_consecutive=req.max_same_article_consecutive,
         ),
+    )
+
+
+@app.post("/traverse/stream", summary="Run a streaming traversal (SSE)")
+async def traverse_stream(req: TraverseRequest):
+    """Stream a traversal step-by-step using Server-Sent Events.
+
+    Each event is a JSON line prefixed with 'data: '.
+    Yields step-by-step as the traversal progresses — the frontend can render
+    nodes incrementally as they arrive.
+    """
+    import asyncio
+    import json
+
+    if _embedder is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Embedder not initialized",
+        )
+
+    try:
+        _vector_store.client.collection_exists(_config.qdrant_collection)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Qdrant unavailable",
+        )
+
+    config = TraversalConfig(
+        depth=req.depth,
+        epsilon=req.epsilon,
+        top_k=req.top_k,
+        collection_name=_config.qdrant_collection,
+        temperature=req.temperature,
+        max_same_article_consecutive=req.max_same_article_consecutive,
+    )
+    engine = TraversalEngine(
+        embedder=_embedder,
+        vector_store=_vector_store,
+        config=config,
+    )
+
+    async def event_generator():
+        try:
+            async for step in engine.traverse_stream(req.query):
+                yield f"data: {json.dumps({'type':'step','depth':step.depth,'chunk_id':step.chunk_id,'text':step.text,'article_title':step.article_title,'article_url':step.article_url,'similarity':step.similarity,'forced_jump':step.forced_jump,'candidates':[{'chunk_id':c['id'],'text':c['payload']['text'],'article_title':c['payload']['article_title'],'article_url':c['payload']['article_url'],'similarity':float(c['score'])} for c in step.candidates]})}\n\n"
+
+            yield f"data: {json.dumps({'type':'done','path':engine.path})}\n\n"
+        except asyncio.CancelledError:
+            # Exit silently — FastAPI handles task cancellation at the response edge.
+            # Yielding after cancellation risks undefined StreamingResponse behavior.
+            return
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 
