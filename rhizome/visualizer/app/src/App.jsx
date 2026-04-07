@@ -123,7 +123,7 @@ export default function App() {
             });
           } else if (data.type === 'done') {
             setStats((prev) =>
-              prev ? { ...prev, forced_jumps: forcedJumpsRef.current } : prev
+              prev ? { ...prev, ...(data.stats || {}), forced_jumps: forcedJumpsRef.current } : prev
             );
             setIsStreaming(false);
             setIsLoading(false);
@@ -183,6 +183,11 @@ export default function App() {
               Wikipedia semantic traversal
             </span>
           </div>
+          {stats?.categories && (
+            <span className="text-xs text-text-muted font-mono mt-1">
+              {stats.categories}
+            </span>
+          )}
           <button
             type="button"
             onClick={toggleTheme}
