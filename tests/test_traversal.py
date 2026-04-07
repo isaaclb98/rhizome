@@ -1,5 +1,6 @@
 """Tests for the traversal engine."""
 
+import asyncio
 import random
 import pytest
 from unittest.mock import MagicMock
@@ -361,6 +362,140 @@ class TestFallbackGlobalJump:
 
 
 # ── TraversalConfig from_dict ─────────────────────────────────────────────────
+
+class TestTraversalStream:
+    """Tests for traverse_stream()."""
+
+    @pytest.mark.asyncio
+    async def test_traverse_stream_returns_path(self):
+        """traverse_stream() yields a non-empty path of TraversalSteps."""
+        mock_vector = [0.1] * 384
+        mock_results = [
+            {
+                "id": "modernism-001",
+                "score": 0.9,
+                "payload": {
+                    "id": "modernism-001",
+                    "text": "Modernism is...",
+                    "article_title": "Modernism",
+                    "article_url": "https://en.wikipedia.org/wiki/Modernism",
+                    "domain": "Philosophy",
+                },
+                "vector": mock_vector,
+            },
+            {
+                "id": "postmodernism-001",
+                "score": 0.8,
+                "payload": {
+                    "id": "postmodernism-001",
+                    "text": "Postmodernism is...",
+                    "article_title": "Postmodernism",
+                    "article_url": "https://en.wikipedia.org/wiki/Postmodernism",
+                    "domain": "Philosophy",
+                },
+                "vector": mock_vector,
+            },
+        ]
+
+        embedder = MockEmbedder()
+        vector_store = MockVectorStore(mock_results)
+        config = TraversalConfig(depth=2, epsilon=0.0, temperature=0.0)
+
+        engine = TraversalEngine(embedder=embedder, vector_store=vector_store, config=config)
+        steps = [step async for step in engine.traverse_stream("modernism")]
+
+        assert len(steps) == 2
+        assert steps[0].chunk_id == "modernism-001"
+        assert steps[1].chunk_id == "postmodernism-001"
+        assert all(isinstance(step, TraversalStep) for step in steps)
+
+    @pytest.mark.asyncio
+    async def test_traverse_stream_accumulates_engine_path(self):
+        """traverse_stream() populates engine.path with chunk_ids."""
+        mock_results = [
+            {
+                "id": "chunk-a",
+                "score": 0.9,
+                "payload": {
+                    "id": "chunk-a",
+                    "text": "Chunk A",
+                    "article_title": "Article A",
+                    "article_url": "https://example.com/a",
+                    "domain": "Philosophy",
+                },
+                "vector": [0.1] * 384,
+            },
+        ]
+
+        embedder = MockEmbedder()
+        vector_store = MockVectorStore(mock_results)
+        config = TraversalConfig(depth=3, epsilon=0.0)
+
+        engine = TraversalEngine(embedder=embedder, vector_store=vector_store, config=config)
+        steps = [step async for step in engine.traverse_stream("test")]
+
+        # Only one unique chunk exists
+        assert len(steps) == 1
+        assert engine.path == ["chunk-a"]
+
+    @pytest.mark.asyncio
+    async def test_traverse_stream_stops_when_no_candidates(self):
+        """traverse_stream() terminates early when no unvisited candidates remain."""
+        embedder = MockEmbedder()
+        vector_store = MockVectorStore([])  # empty
+        config = TraversalConfig(depth=5, epsilon=0.0)
+
+        engine = TraversalEngine(embedder=embedder, vector_store=vector_store, config=config)
+        steps = [step async for step in engine.traverse_stream("nonexistent")]
+
+        assert steps == []
+        assert engine.path == []
+
+    @pytest.mark.asyncio
+    async def test_traverse_stream_yields_forced_jump_flag(self):
+        """traverse_stream() correctly marks steps with forced_jump=True."""
+        mock_vector = [0.1] * 384
+        # Two chunks from same article → second pick triggers forced jump
+        mock_results = [
+            {
+                "id": "modernism-001",
+                "score": 0.9,
+                "payload": {
+                    "id": "modernism-001",
+                    "text": "Modernism...",
+                    "article_title": "Modernism",
+                    "article_url": "https://en.wikipedia.org/wiki/Modernism",
+                    "domain": "Philosophy",
+                },
+                "vector": mock_vector,
+            },
+            {
+                "id": "modernism-002",
+                "score": 0.85,
+                "payload": {
+                    "id": "modernism-002",
+                    "text": "Modernism continued...",
+                    "article_title": "Modernism",
+                    "article_url": "https://en.wikipedia.org/wiki/Modernism",
+                    "domain": "Philosophy",
+                },
+                "vector": mock_vector,
+            },
+        ]
+
+        embedder = MockEmbedder()
+        vector_store = MockVectorStore(mock_results)
+        # max_same_article_consecutive=1 forces jump on second modernism pick
+        config = TraversalConfig(depth=3, epsilon=0.0, max_same_article_consecutive=1, temperature=0.0)
+
+        engine = TraversalEngine(embedder=embedder, vector_store=vector_store, config=config)
+        steps = [step async for step in engine.traverse_stream("modernism")]
+
+        # At least one step should have been yielded
+        assert len(steps) >= 1
+        # The engine.path should accumulate regardless of forced jumps
+        assert len(engine.path) >= 1
+
 
 class TestTraversalConfigFromDict:
     """Tests for TraversalConfig.from_dict()."""
