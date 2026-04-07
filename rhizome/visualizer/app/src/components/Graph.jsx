@@ -3,7 +3,7 @@ import * as d3 from 'd3';
 
 // Uses CSS var --node-color set by data-theme on document root
 
-export default function Graph({ path, selectedChunkId, onNodeClick }) {
+export default function Graph({ path, selectedChunkId, onNodeClick, depth }) {
   const svgRef = useRef(null);
   const containerRef = useRef(null);
   const zoomRef = useRef(null);  // store zoom behavior for programmatic control
@@ -75,9 +75,10 @@ export default function Graph({ path, selectedChunkId, onNodeClick }) {
     // Node positions: all at center x=W/2
     const cx = W / 2;
     const nodeById = new Map();
+    const totalSlots = Math.max((depth || path.length) - 1, 1);
     nodes.forEach((n, i) => {
       const x = cx;
-      const y = padTop + (i / Math.max(nodes.length - 1, 1)) * usableH;
+      const y = padTop + (i / totalSlots) * usableH;
       nodeById.set(n.id, { ...n, x, y });
     });
 
@@ -217,7 +218,7 @@ export default function Graph({ path, selectedChunkId, onNodeClick }) {
       });
 
     svg.on('click', () => onNodeClick(null));
-  }, [nodes, pathEdges, knnEdges, selectedChunkId, onNodeClick]);
+  }, [nodes, pathEdges, knnEdges, selectedChunkId, onNodeClick, depth]);
 
   // When selectedChunkId changes, animate view to center the clicked node
   useEffect(() => {
@@ -236,7 +237,7 @@ export default function Graph({ path, selectedChunkId, onNodeClick }) {
     const padTop = 20, padBottom = 20;
     const usableH = H - padTop - padBottom;
     const cx = W / 2;
-    const nodeY = padTop + (stepIndex / Math.max(nodes.length - 1, 1)) * usableH;
+    const nodeY = padTop + (stepIndex / Math.max((depth || nodes.length) - 1, 1)) * usableH;
 
     // Get current zoom state
     const svg = d3.select(svgRef.current);
@@ -249,7 +250,7 @@ export default function Graph({ path, selectedChunkId, onNodeClick }) {
       .scale(currentScale);
 
     svg.transition().duration(300).call(zoomRef.current.transform, targetTransform);
-  }, [selectedChunkId, nodes]);
+  }, [selectedChunkId, nodes, depth]);
 
   useEffect(() => {
     drawGraph();
