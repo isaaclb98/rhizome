@@ -3,8 +3,18 @@ import Controls from './components/Controls.jsx';
 import Graph from './components/Graph.jsx';
 import PathPanel from './components/PathPanel.jsx';
 
+const EXAMPLE_QUERIES = [
+  'the tension between modernism and postmodernism',
+  'what is the relationship between art and technology',
+  'the aesthetics of modernism',
+  'how did Abstract Expressionism influence contemporary art',
+  'the death of the author and literary theory',
+  'indeterminacy in art and philosophy',
+  'fragmentation',
+];
+
 const DEFAULT_PARAMS = {
-  query: 'the tension between modernism and postmodernism',
+  query: EXAMPLE_QUERIES[Math.floor(Math.random() * EXAMPLE_QUERIES.length)],
   depth: 20,
   epsilon: 0.1,
   top_k: 30,
@@ -31,6 +41,16 @@ export default function App() {
   }, []);
 
   const [theme, setTheme] = useState('light');
+  const [categories, setCategories] = useState('');
+
+  // Fetch server config (categories) on mount
+  useEffect(() => {
+    fetch('/config')
+      .then((r) => r.json())
+      .then((data) => setCategories(data.categories || ''))
+      .catch(() => console.warn('Failed to fetch /config'));
+  }, []);
+
   const toggleTheme = useCallback(() => {
     setTheme(prev => {
       const next = prev === 'light' ? 'dark' : 'light';
@@ -183,9 +203,9 @@ export default function App() {
               Wikipedia semantic traversal
             </span>
           </div>
-          {stats?.categories && (
-            <span className="text-xs text-text-muted font-mono mt-1">
-              {stats.categories}
+          {((categories || stats?.categories)?.trim()) && (
+            <span className="text-[10px] text-text-muted font-mono mt-1">
+              {(stats?.categories || categories).split(',').join(' · ')}
             </span>
           )}
           <button

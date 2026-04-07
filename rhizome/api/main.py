@@ -163,7 +163,14 @@ def health():
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Qdrant unavailable",
         )
-    return {"status": "ok"}
+
+
+@app.get("/config")
+def config_endpoint():
+    """Return the server configuration visible to clients."""
+    return {
+        "categories": _config.wikipedia_categories,
+    }
 
 
 @app.post("/traverse", response_model=TraverseResponse)
