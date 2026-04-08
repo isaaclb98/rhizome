@@ -33,10 +33,11 @@ export default function App() {
   const abortControllerRef = useRef(null);
   const forcedJumpsRef = useRef(0);
 
-  // Theme: default light, read from localStorage on mount
+  // Theme: respect browser preference, then localStorage, then default light
   useEffect(() => {
     const stored = localStorage.getItem('rhizome-theme');
-    const initial = stored || 'light';
+    const preferred = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    const initial = stored || preferred;
     document.documentElement.setAttribute('data-theme', initial);
   }, []);
 
