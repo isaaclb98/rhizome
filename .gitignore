@@ -219,3 +219,7 @@ rhizome/visualizer/static/
 # npm artifact files (e.g., =2.14.0 from malformed package-lock.json)
 =*
 .gstack/
+
+# Rhizome runtime artifacts
+.rhizome_checkpoints
+.context
