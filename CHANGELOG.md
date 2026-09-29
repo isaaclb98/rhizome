@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Features
+- **Idea agent** — new `rhizome idea` command. An LLM plans epsilon-greedy walks through the corpus, diagnoses the fragment sets they return, re-walks with adjusted knobs (seed, epsilon, temperature, depth, top_k), then forges concept cards. Cards carry two-register provenance: `corpus` components cite a real chunk id with a verbatim quote, `model` components state a falsifiable claim from the LLM's training. Fabricated citations are demoted to model register rather than kept. Each card is novelty-checked by embedding it and searching the corpus (high similarity = tracing, low = map), model claims are audited against retrieved passages, and a critic rules keep/revise/discard. Later rounds re-seed from the best survivor. See `IDEAS.md`.
+- **`rhizome/llm/`** — `LLMClient` protocol plus an OpenAI-compatible gateway transport for chat completions and embeddings. Handles reasoning models: strips `<think>` blocks (including unterminated ones) before JSON extraction, and detects `finish_reason == "length"` truncation, doubling the token budget and retrying from the original messages.
+- **Config** — `LLM_GATEWAY_URL`, `LLM_GATEWAY_API_KEY`, `LLM_MODEL`, `EMBEDDING_MODEL`, `IDEA_MAX_WALKS`, `IDEA_WALK_DEPTH`, `IDEA_MAX_ROUNDS`, `IDEA_MAX_IDEAS`.
+
+### Bug Fixes
+- **qdrant-client 1.19 compatibility** — `VectorStoreClient.search()` and `search_excluding()` used the removed `models.SearchRequest` and `client.http.search_api`, raising `AttributeError` on any install resolving `qdrant-client>=1.9`. Both now route through `query_points`. This broke traversal on fresh installs, since `pyproject.toml` allows `>=1.7.0`.
+
+### Maintenance
+- Gitignored `.rhizome_checkpoints` and `.context` — untracked in 3343bcc but never ignored, so they kept reappearing as untracked files.
+
 ## 0.6.0 - 2026-04-07
 
 ### Features

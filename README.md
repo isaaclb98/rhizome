@@ -195,6 +195,25 @@ rhizome traverse "deconstruction as architectural theory"
 
 ---
 
+## Idea agent
+
+`rhizome idea` generates philosophical concepts rather than stitched prose. An LLM plans epsilon-greedy walks, diagnoses the loose fragments each walk returns, re-walks with different knobs, then forges concept cards and vets them against the corpus.
+
+```bash
+rhizome idea "the tension between structure and event" \
+  --max-walks 3 --walk-depth 6 --rounds 2 --max-ideas 3 \
+  -o cards.md -j run.json
+```
+
+Two things make this more than a formatter over `traverse`:
+
+- **Two-register provenance.** Every component of a concept is tagged `corpus` (cited to a real chunk, verbatim quote) or `model` (drawn from the LLM's training — lineages, rival readings, suppressed terms). Fabricated citations are demoted, not kept.
+- **Verification both directions.** Each card is embedded and searched against the corpus: a high similarity means the literature already contains that synthesis (a *tracing*), a low one means it occupies a void (a *map*). Model-register claims are then audited by the corpus too, and ruled corroborated, contested, or uncorroborated.
+
+Requires an OpenAI-compatible endpoint serving both chat completions and embeddings — set `LLM_GATEWAY_URL`, `LLM_MODEL`, `EMBEDDING_MODEL`. No API key is needed if the gateway is open. See [IDEAS.md](IDEAS.md) for the full design.
+
+---
+
 ## Output format
 
 Each paragraph is followed by its citation:
