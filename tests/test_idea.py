@@ -5,7 +5,13 @@ import json
 import pytest
 from click.testing import CliRunner
 
-from rhizome.cli.commands.idea import build_prompt, format_fragments
+from rhizome.cli.commands.idea import (
+    build_prompt,
+    format_fragments,
+    material_path,
+    render_material,
+)
+from rhizome.traversal.config import TraversalConfig
 from rhizome.cli.main import main
 from rhizome.embedder.base import EmbeddingError
 from rhizome.gateway import GatewayEmbedder, GatewayError, GatewayLLM, strip_thinking
@@ -324,6 +330,43 @@ def stubbed(monkeypatch):
     return captured
 
 
+class TestMaterialSidecar:
+    def test_path_replaces_md_suffix(self):
+        assert material_path("/tmp/thesis.md") == "/tmp/thesis.material.md"
+
+    def test_path_appends_when_no_suffix(self):
+        assert material_path("/tmp/thesis") == "/tmp/thesis.material.md"
+
+    def test_path_handles_nested_dirs(self):
+        assert material_path("out/runs/a.md") == "out/runs/a.material.md"
+
+    def test_path_keeps_dots_in_name(self):
+        assert material_path("my.draft.md") == "my.draft.material.md"
+
+    def test_renders_seed_and_knobs(self):
+        config = TraversalConfig(depth=12, epsilon=0.4, top_k=30, temperature=1.5,
+                                 max_same_article_consecutive=2)
+        out = render_material("structure and event", [make_step(), make_step(jump=True)], config)
+        assert "# Material: structure and event" in out
+        assert "depth=12" in out
+        assert "epsilon=0.4" in out
+        assert "top_k=30" in out
+        assert "2 fragment(s)" in out
+        assert "1 forced jump(s)" in out
+
+    def test_renders_each_step_with_provenance(self):
+        config = TraversalConfig()
+        out = render_material("seed", [make_step("Anti-Oedipus", "the body text")], config)
+        assert "[1] Anti-Oedipus" in out
+        assert "https://en.wikipedia.org/wiki/Anti-Oedipus" in out
+        assert "0.670" in out
+        assert "the body text" in out
+
+    def test_marks_forced_jumps(self):
+        out = render_material("seed", [make_step("A", jump=True)], TraversalConfig())
+        assert "forced jump" in out
+
+
 class TestIdeaCommand:
     def test_registered(self):
         assert "idea" in CliRunner().invoke(main, ["--help"]).output
@@ -392,6 +435,91 @@ class TestIdeaCommand:
         CliRunner().invoke(main, ["idea", "seed"])
         assert "Anti-Oedipus" in stubbed["prompt"]
         assert "Henri Bergson" in stubbed["prompt"]
+
+    def test_material_off_by_default(self, stubbed, tmp_path):
+        out = tmp_path / "thesis.md"
+        result = CliRunner().invoke(main, ["idea", "seed", "-o", str(out)])
+        assert result.exit_code == 0
+        assert out.exists()
+        assert not (tmp_path / "thesis.material.md").exists()
+        assert "Material written" not in result.output
+
+    def test_save_material_writes_sidecar(self, stubbed, tmp_path):
+        out = tmp_path / "thesis.md"
+        result = CliRunner().invoke(
+            main, ["idea", "seed", "-o", str(out), "--save-material"]
+        )
+        assert result.exit_code == 0
+        side = tmp_path / "thesis.material.md"
+        assert side.exists()
+        content = side.read_text(encoding="utf-8")
+        assert "# Material: seed" in content
+        assert "Anti-Oedipus" in content
+        assert "Henri Bergson" in content
+        assert "Material written to:" in result.output
+
+    def test_save_material_records_knobs_used(self, stubbed, tmp_path):
+        out = tmp_path / "thesis.md"
+        CliRunner().invoke(
+            main,
+            ["idea", "seed", "-o", str(out), "--save-material",
+             "--depth", "12", "--epsilon", "0.4", "--temperature", "1.5"],
+        )
+        content = (tmp_path / "thesis.material.md").read_text(encoding="utf-8")
+        assert "depth=12" in content
+        assert "epsilon=0.4" in content
+        assert "temperature=1.5" in content
+
+    def test_no_save_material_flag_disables_it(self, stubbed, tmp_path):
+        out = tmp_path / "thesis.md"
+        result = CliRunner().invoke(
+            main, ["idea", "seed", "-o", str(out), "--no-save-material"]
+        )
+        assert result.exit_code == 0
+        assert not (tmp_path / "thesis.material.md").exists()
+
+    def test_save_material_without_output_aborts(self, stubbed):
+        result = CliRunner().invoke(main, ["idea", "seed", "--save-material"])
+        assert result.exit_code != 0
+        assert "--save-material requires -o" in result.output
+
+    def test_material_written_before_llm_call(self, monkeypatch, tmp_path):
+        """An LLM failure must not discard the expensive walk."""
+        monkeypatch.setattr("rhizome.cli.commands.idea.get_config", lambda: _StubConfig())
+        monkeypatch.setattr(
+            "rhizome.cli.commands.idea.CollectionManager",
+            lambda **kwargs: type("CM", (), {"collection_exists": lambda self, n: True})(),
+        )
+        monkeypatch.setattr(
+            "rhizome.cli.commands.idea.TraversalEngine.traverse",
+            lambda self, c: [make_step("Anti-Oedipus")],
+        )
+        monkeypatch.setattr(
+            "rhizome.cli.commands.idea.GatewayEmbedder", lambda **kwargs: object()
+        )
+
+        class FailingLLM:
+            model = "failing-model"
+
+            def __init__(self, **kwargs):
+                pass
+
+            def complete(self, messages, **kwargs):
+                raise GatewayError("gateway error 503")
+
+        monkeypatch.setattr("rhizome.cli.commands.idea.GatewayLLM", FailingLLM)
+        out = tmp_path / "thesis.md"
+        result = CliRunner().invoke(
+            main, ["idea", "seed", "-o", str(out), "--save-material"]
+        )
+        assert result.exit_code != 0
+        assert (tmp_path / "thesis.material.md").exists()
+        assert not out.exists()
+
+    def test_help_documents_flag_as_off_by_default(self):
+        out = CliRunner().invoke(main, ["idea", "--help"]).output
+        assert "--save-material" in out
+        assert "--no-save-material" in out
 
     def test_missing_gateway_url_aborts(self, monkeypatch):
         class NoGateway(_StubConfig):

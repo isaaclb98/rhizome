@@ -1,5 +1,7 @@
 """Synthesize a thesis from a traversal's material."""
 
+from pathlib import Path
+
 import click
 
 from rhizome.config import get_config
@@ -45,6 +47,59 @@ def format_fragments(path) -> str:
     return "\n\n---\n\n".join(blocks)
 
 
+def material_path(output: str) -> str:
+    """Derive the sidecar material path from the thesis output path.
+
+    Sits beside the output rather than in the cwd, so the pair stays together
+    and no file appears where it was not asked for.
+
+    Args:
+        output: The thesis output path.
+
+    Returns:
+        Path with ".material.md" replacing or appended to the output suffix.
+    """
+    path = Path(output)
+    return str(path.with_suffix("")) + ".material.md"
+
+
+def render_material(seed: str, path, config) -> str:
+    """Render the walked fragments as a markdown audit trail.
+
+    Records the knobs and every step's provenance so a thesis can be traced
+    back to the exact material that produced it. The walk is non-deterministic,
+    so without this the run is unreproducible once the process exits.
+
+    Args:
+        seed: The starting concept.
+        path: Ordered list of TraversalStep.
+        config: The TraversalConfig used for the walk.
+
+    Returns:
+        Markdown string describing the run and its fragments.
+    """
+    jumps = sum(1 for step in path if step.forced_jump)
+    lines = [
+        f"# Material: {seed}",
+        "",
+        f"Walked {len(path)} fragment(s) across "
+        f"{len({step.article_title for step in path})} article(s), {jumps} forced jump(s).",
+        "",
+        f"Knobs: depth={config.depth}, epsilon={config.epsilon}, top_k={config.top_k}, "
+        f"temperature={config.temperature}, "
+        f"max_same_article_consecutive={config.max_same_article_consecutive}",
+        "",
+    ]
+    for index, step in enumerate(path, start=1):
+        marker = " — forced jump" if step.forced_jump else ""
+        lines.append(
+            f"## [{index}] {step.article_title}{marker}\n\n"
+            f"*{step.article_url}* | similarity {step.similarity:.3f} | depth {step.depth}\n\n"
+            f"{step.text}\n"
+        )
+    return "\n".join(lines)
+
+
 def build_prompt(seed: str, path) -> str:
     """Assemble the synthesis prompt from a seed and a traversal path.
 
@@ -76,6 +131,11 @@ def build_prompt(seed: str, path) -> str:
 @click.option("--model", type=str, help="LLM model name (overrides config)")
 @click.option("--llm-temperature", type=float, help="Sampling temperature for the LLM")
 @click.option("--output", "-o", type=click.Path(), help="Output file (default: stdout)")
+@click.option(
+    "--save-material/--no-save-material",
+    default=False,
+    help="Also write the walked fragments to '<output>.material.md' so the run is traceable. Requires -o.",
+)
 def idea(
     concept: str,
     depth: int | None,
@@ -86,6 +146,7 @@ def idea(
     model: str | None,
     llm_temperature: float | None,
     output: str | None,
+    save_material: bool,
 ):
     """Synthesize a thesis from a traversal of the corpus.
 
@@ -95,6 +156,14 @@ def idea(
     model supplies the thinking that joins it.
     """
     cfg = get_config()
+
+    if save_material and not output:
+        click.echo(
+            "Error: --save-material requires -o/--output, since the material is "
+            "written alongside the thesis file.",
+            err=True,
+        )
+        raise click.Abort()
 
     if not cfg.llm_gateway_url:
         click.echo(
@@ -172,6 +241,14 @@ def idea(
         f"{len({step.article_title for step in path})} articles ({jumps} forced jump(s))",
         err=True,
     )
+
+    if save_material:
+        if output is None:
+            raise click.Abort()
+        side = material_path(output)
+        with open(side, "w", encoding="utf-8") as handle:
+            handle.write(render_material(concept, path, config))
+        click.echo(f"Material written to: {side}", err=True)
 
     llm = GatewayLLM(
         base_url=cfg.llm_gateway_url,

@@ -4,6 +4,7 @@
 
 ### Features
 - **`rhizome idea`** — walks the corpus exactly as `traverse` does (same `--depth`, `--epsilon`, `--top-k`, `--temperature`, `--max-same-article-consecutive` knobs), then hands the fragments to an LLM as material for a single synthesized thesis in prose. No planner, no verification stage, no automated quality gate — read the output and judge it yourself. Requires `LLM_GATEWAY_URL` (an OpenAI-compatible endpoint serving chat completions and embeddings).
+- **`--save-material`** (default off) — writes the walked fragments to `<output>.material.md` with the knobs and each step's provenance, so a run stays traceable after the process exits. Requires `-o`.
 - **`rhizome/gateway.py`** — embeddings and chat completions for OpenAI-compatible endpoints. Strips reasoning-model thinking blocks before reading the answer, and retries with a doubled token budget when a reply is truncated mid-reasoning.
 
 ### Bug Fixes

@@ -207,6 +207,14 @@ All traversal knobs are exposed (`--depth`, `--epsilon`, `--top-k`, `--temperatu
 
 Output is prose, one argument, citing the articles the walk actually surfaced. There is no planner, no verification stage, and no quality gate: nothing filters the output before you read it.
 
+The walk is non-deterministic and nothing is retained by default, so pass `--save-material` to keep the fragments a thesis was built from. It writes a sidecar beside the thesis (`thesis.md` → `thesis.material.md`) recording the knobs, each step's article, URL, similarity, and forced-jump status:
+
+```bash
+rhizome idea "seed" -o thesis.md --save-material
+```
+
+Requires `-o` — no file appears where one was not asked for. Default off.
+
 Needs an OpenAI-compatible endpoint for chat and embeddings — set `LLM_GATEWAY_URL`, `LLM_MODEL`, `EMBEDDING_MODEL`. The embedding model must match what the corpus was ingested with (1536-dim `text-embedding-3-small` for the current collection). No API key is needed if the endpoint is open.
 
 ---
