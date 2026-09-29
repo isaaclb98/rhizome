@@ -58,7 +58,7 @@ class GatewayLLM:
     def __init__(
         self,
         base_url: str,
-        model: str = "auto/best-reasoning",
+        model: str = "agy/claude-opus-4-6-thinking-high",
         api_key: str | None = None,
         timeout: int = 600,
     ):

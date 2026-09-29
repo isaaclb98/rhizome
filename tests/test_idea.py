@@ -284,7 +284,7 @@ class _StubConfig:
     qdrant_collection = "rhizome"
     llm_gateway_url = "http://gateway.test"
     llm_gateway_api_key = None
-    llm_model = "auto/best-reasoning"
+    llm_model = "agy/claude-opus-4-6-thinking-high"
     embedding_model = "openai/text-embedding-3-small"
     llm_temperature = 0.9
     default_depth = 8
@@ -425,7 +425,7 @@ class TestIdeaCommand:
 
     def test_default_model_used(self, stubbed):
         CliRunner().invoke(main, ["idea", "seed"])
-        assert stubbed["llm_model"] == "auto/best-reasoning"
+        assert stubbed["llm_model"] == "agy/claude-opus-4-6-thinking-high"
 
     def test_llm_temperature_passed(self, stubbed):
         CliRunner().invoke(main, ["idea", "seed", "--llm-temperature", "0.3"])

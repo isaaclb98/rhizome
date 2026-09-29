@@ -83,7 +83,9 @@ class RhizomeConfig(BaseSettings):
     # embeddings. No key needed if the endpoint is open.
     llm_gateway_url: str | None = Field(default=None, alias="LLM_GATEWAY_URL")
     llm_gateway_api_key: str | None = Field(default=None, alias="LLM_GATEWAY_API_KEY")
-    llm_model: str = Field(default="auto/best-reasoning", alias="LLM_MODEL")
+    llm_model: str = Field(
+        default="agy/claude-opus-4-6-thinking-high", alias="LLM_MODEL"
+    )
     embedding_model: str = Field(
         default="openai/text-embedding-3-small", alias="EMBEDDING_MODEL"
     )
