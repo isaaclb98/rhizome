@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Features
+- **`rhizome idea`** — walks the corpus exactly as `traverse` does (same `--depth`, `--epsilon`, `--top-k`, `--temperature`, `--max-same-article-consecutive` knobs), then hands the fragments to an LLM as material for a single synthesized thesis in prose. No planner, no verification stage, no automated quality gate — read the output and judge it yourself. Requires `LLM_GATEWAY_URL` (an OpenAI-compatible endpoint serving chat completions and embeddings).
+- **`rhizome/gateway.py`** — embeddings and chat completions for OpenAI-compatible endpoints. Strips reasoning-model thinking blocks before reading the answer, and retries with a doubled token budget when a reply is truncated mid-reasoning.
+
+### Bug Fixes
+- **qdrant-client 1.19 compatibility** — `VectorStoreClient.search()` and `search_excluding()` used the removed `models.SearchRequest` and `client.http.search_api`, raising `AttributeError` on any install resolving `qdrant-client>=1.9`. Both now route through `query_points`. This broke traversal on fresh installs, since `pyproject.toml` allowed `>=1.7.0`; the floor is now `1.10.0`.
+
+### Maintenance
+- Gitignored `.rhizome_checkpoints` and `.context` — untracked in 3343bcc but never ignored, so they kept reappearing as untracked files.
+- `tests/conftest.py` isolates config from a developer's local `.env`, which previously leaked into the test session via `load_dotenv()` at CLI import time.
+
 ## 0.6.0 - 2026-04-07
 
 ### Features

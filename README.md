@@ -195,6 +195,22 @@ rhizome traverse "deconstruction as architectural theory"
 
 ---
 
+## Idea synthesis
+
+`rhizome idea` walks the corpus exactly as `traverse` does, then hands the fragments to an LLM as material for a single thesis:
+
+```bash
+rhizome idea "the tension between structure and event" --depth 10 --epsilon 0.25 -o thesis.md
+```
+
+All traversal knobs are exposed (`--depth`, `--epsilon`, `--top-k`, `--temperature`, `--max-same-article-consecutive`), so you vary the run yourself — re-run with different settings and read what changes.
+
+Output is prose, one argument, citing the articles the walk actually surfaced. There is no planner, no verification stage, and no quality gate: nothing filters the output before you read it.
+
+Needs an OpenAI-compatible endpoint for chat and embeddings — set `LLM_GATEWAY_URL`, `LLM_MODEL`, `EMBEDDING_MODEL`. The embedding model must match what the corpus was ingested with (1536-dim `text-embedding-3-small` for the current collection). No API key is needed if the endpoint is open.
+
+---
+
 ## Output format
 
 Each paragraph is followed by its citation:

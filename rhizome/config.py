@@ -79,9 +79,21 @@ class RhizomeConfig(BaseSettings):
     temperature: float = Field(default=1.0, alias="TEMPERATURE")
     max_same_article_consecutive: int = Field(default=2, alias="MAX_SAME_ARTICLE_CONSECUTIVE")
 
-    # ── Validators ──────────────────────────────────────────────────────────────
+    # Idea synthesis (`rhizome idea`) — OpenAI-compatible endpoint for chat and
+    # embeddings. No key needed if the endpoint is open.
+    llm_gateway_url: str | None = Field(default=None, alias="LLM_GATEWAY_URL")
+    llm_gateway_api_key: str | None = Field(default=None, alias="LLM_GATEWAY_API_KEY")
+    llm_model: str = Field(default="auto/best-reasoning", alias="LLM_MODEL")
+    embedding_model: str = Field(
+        default="openai/text-embedding-3-small", alias="EMBEDDING_MODEL"
+    )
+    llm_temperature: float = Field(default=0.9, alias="LLM_TEMPERATURE")
 
-    @field_validator("qdrant_api_key", "openai_api_key", "hf_api_token", mode="before")
+    # ── Validators ────────────────────────────────────────────────────────────
+
+    @field_validator(
+        "qdrant_api_key", "openai_api_key", "hf_api_token", "llm_gateway_api_key", mode="before"
+    )
     @classmethod
     def resolve_env_var(cls, v: str | None) -> str | None:
         """Resolve ${VAR} syntax for backward compat with config.yaml env refs.
