@@ -10,6 +10,7 @@ import click
 
 from rhizome.cli.commands.ingest import ingest
 from rhizome.cli.commands.traverse import traverse
+from rhizome.cli.commands.idea import idea
 from rhizome.cli.commands.migrate import migrate_domain_field
 
 
@@ -22,6 +23,7 @@ def main():
 
 main.add_command(ingest)
 main.add_command(traverse)
+main.add_command(idea)
 main.add_command(migrate_domain_field)
 
 
