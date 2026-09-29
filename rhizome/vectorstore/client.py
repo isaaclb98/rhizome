@@ -13,6 +13,36 @@ class VectorStoreClient:
         self.client = QdrantClient(url=url, api_key=api_key, port=443 if url.startswith("https://") else None, timeout=30)
         self.collection_name = collection_name
 
+    def _query_points(
+        self,
+        query_vector: list[float],
+        limit: int,
+        query_filter: Filter | None,
+        with_vector: bool,
+    ):
+        """Run a nearest-neighbour query and return the raw hit objects.
+
+        Uses query_points rather than the removed low-level SearchRequest API.
+
+        Args:
+            query_vector: The query embedding vector.
+            limit: Maximum number of points to return.
+            query_filter: Optional Qdrant filter.
+            with_vector: Whether to return stored vectors.
+
+        Returns:
+            List of scored point objects.
+        """
+        response = self.client.query_points(
+            collection_name=self.collection_name,
+            query=query_vector,
+            limit=limit,
+            query_filter=query_filter,
+            with_payload=True,
+            with_vectors=with_vector,
+        )
+        return list(getattr(response, "points", None) or [])
+
     def search(
         self,
         query_vector: list[float],
@@ -31,28 +61,16 @@ class VectorStoreClient:
         Returns:
             List of dicts with 'id', 'score', 'payload', and optionally 'vector' keys.
         """
-        from qdrant_client.http import models
-
-        search_req = models.SearchRequest(
-            vector=query_vector,
-            limit=top_k,
-            filter=query_filter,
-            with_payload=True,
-            with_vector=with_vector,
-        )
-        response = self.client.http.search_api.search_points(
-            collection_name=self.collection_name,
-            search_request=search_req,
-        )
+        points = self._query_points(query_vector, top_k, query_filter, with_vector)
 
         return [
             {
                 "id": hit.id,
                 "score": hit.score,
                 "payload": hit.payload,
-                "vector": hit.vector if with_vector else None,
+                "vector": getattr(hit, "vector", None) if with_vector else None,
             }
-            for hit in (response.result or [])
+            for hit in points
         ]
 
     def search_excluding(
@@ -76,29 +94,18 @@ class VectorStoreClient:
             List of dicts with 'id', 'score', 'payload', and optionally 'vector' keys,
             excluding the specified IDs.
         """
-        from qdrant_client.http import models
-
         # Over-fetch to account for exclusions
-        search_req = models.SearchRequest(
-            vector=query_vector,
-            limit=top_k * 3,
-            filter=query_filter,
-            with_payload=True,
-            with_vector=with_vector,
-        )
-        response = self.client.http.search_api.search_points(
-            collection_name=self.collection_name,
-            search_request=search_req,
+        points = self._query_points(
+            query_vector, top_k * 3, query_filter, with_vector
         )
 
-        hits = response.result or []
-        filtered = [hit for hit in hits if (hit.payload or {}).get("id") not in exclude_ids]
+        filtered = [hit for hit in points if (hit.payload or {}).get("id") not in exclude_ids]
         return [
             {
                 "id": hit.id,
                 "score": hit.score,
                 "payload": hit.payload,
-                "vector": hit.vector if with_vector else None,
+                "vector": getattr(hit, "vector", None) if with_vector else None,
             }
             for hit in filtered[:top_k]
         ]
