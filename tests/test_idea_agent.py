@@ -479,7 +479,8 @@ class TestCritique:
         assert card.is_tracing()
         assert card.confidence == 0.3
         assert "referee scored 0.95" in card.confidence_note
-        assert "tracing of 'process philosophy'" in card.confidence_note
+        assert "ruled it a tracing" in card.confidence_note
+        assert card.tracing_of == "process philosophy"
 
     def test_uncapped_card_has_empty_note(self, fake_traverse):
         agent, _, _, _ = build_agent(max_walks=2, max_rounds=1)

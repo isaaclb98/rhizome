@@ -550,8 +550,7 @@ class IdeaAgent:
             if card.is_tracing():
                 if card.confidence > 0.3:
                     card.confidence = 0.3
-                caps.append(f"capped at 0.3: referee named it a tracing of {card.tracing_of!r}")
-
+                caps.append("capped at 0.3: referee ruled it a tracing (see tracing_of)")
             if caps:
                 card.confidence_note = (
                     f"referee scored {referee_score:.2f}; " + "; ".join(caps)

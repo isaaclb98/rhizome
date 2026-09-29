@@ -182,9 +182,27 @@ class TestRenderCards:
         assert "tracing of: process philosophy" in out
 
     def test_confidence_note_shown(self):
+        note = "referee scored 0.95; capped at 0.3: referee ruled it a tracing (see tracing_of)"
         run = make_run()
-        run.cards[0].confidence_note = "referee scored 0.95; capped at 0.3: tracing"
-        assert "*referee scored 0.95; capped at 0.3: tracing*" in render_cards(run)
+        run.cards[0].confidence_note = note
+        out = render_cards(run)
+        assert f"*{note}*" in out
+
+    def test_confidence_note_omitted_when_empty(self):
+        run = make_run()
+        run.cards[0].confidence_note = ""
+        assert "referee scored" not in render_cards(run)
+
+    def test_tracing_text_not_duplicated_in_note(self):
+        """The flags line already prints tracing_of; the note must not repeat it."""
+        target = "Althusserian symptomal reading"
+        note = "referee scored 0.95; capped at 0.3: referee ruled it a tracing (see tracing_of)"
+        run = make_run()
+        run.cards[0].tracing_of = target
+        run.cards[0].confidence_note = note
+        out = render_cards(run)
+        assert out.count(target) == 1
+        assert target not in note
 
     def test_unjudged_default_verdict(self):
         run = make_run()
