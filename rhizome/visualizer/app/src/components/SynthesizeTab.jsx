@@ -1,6 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import Markdown from 'react-markdown';
-import Examples from './Examples.jsx';
 import Slider from './Slider.jsx';
 import { explorationToParams } from '../exploration.js';
 
@@ -256,14 +255,16 @@ export default function SynthesizeTab({ params, setParams }) {
               Synthesizing…
             </div>
           ) : (
-            <Examples
-              disabled={isLoading}
-              onPick={(seed) => {
-                updateParam('query', seed);
-                // Run synthesis on the next tick so the seed input reflects the pick
-                setTimeout(() => handleSynthesize(), 0);
-              }}
-            />
+            <div className="h-full flex items-center justify-center">
+              <div className="max-w-md text-center space-y-2 px-6">
+                <div className="text-text-muted text-sm font-medium">
+                  Your synthesis will appear here
+                </div>
+                <p className="text-text-secondary text-xs leading-relaxed">
+                  The walk reads through the corpus, collects fragments, and the LLM forges a thesis from them.
+                </p>
+              </div>
+            </div>
           )}
         </div>
 
