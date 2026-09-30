@@ -15,9 +15,11 @@ from rhizome.vectorstore.collection import CollectionManager
 
 PROMPT = """You are given fragments collected by a random walk through a vector space of Wikipedia. They are deliberately disjointed — some will be unrelated to each other and to the seed. That is the point.
 
-Write one thesis: a single argument with a real claim, built by synthesizing this material. Use the fragments as evidence and as raw material. Where you need connective tissue the fragments do not supply — lineage, framing, a concept you know — supply it from your own knowledge and say which you are doing.
+Write one thesis: a single argument with a real claim, built by synthesizing this material. Use the fragments as evidence and as raw material. Where you need connective tissue the fragments do not supply — lineage, framing, a concept you know — supply it from your own knowledge, woven in as established fact.
 
 Do not summarize the fragments in order. Do not list ideas. Do not comment on the traversal. Argue one thing, and let the collisions in the material carry it. Cite the articles you actually used.
+
+Voice: assert. Never use first person — no "I", "we", "my", "us", in any form, including inside quotations of your own reasoning. Never hedge or narrate your process: no "I assume", "I read this as", "it seems", "one might argue", "arguably", "I take X to mean". State every claim as fact and commit to it. If the material is thin, say so as a property of the material, not as a confession about your uncertainty.
 
 Seed: {seed}
 

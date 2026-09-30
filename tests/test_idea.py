@@ -277,6 +277,22 @@ class TestPromptBuilding:
         prompt = build_prompt("seed", [make_step()])
         assert "Do not list ideas" in prompt
 
+    def test_prompt_forbids_first_person_and_hedging(self):
+        prompt = build_prompt("seed", [make_step()])
+        assert "Never use first person" in prompt
+        assert "I assume" in prompt  # named as a banned construction
+        assert "assert" in prompt
+
+    def test_prompt_does_not_invite_reflective_style(self):
+        """The prompt must not ask the model to narrate its own reasoning.
+
+        An earlier revision told the model to "say which you are doing" when
+        supplying connective tissue — which directly invites the first-person
+        reflective voice the thesis is required to avoid.
+        """
+        prompt = build_prompt("seed", [make_step()])
+        assert "say which you are doing" not in prompt
+
 
 class _StubConfig:
     qdrant_url = "http://localhost:6333"
