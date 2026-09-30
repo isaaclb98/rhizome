@@ -166,20 +166,10 @@ export default function TraverseTab({ params, setParams }) {
 
   return (
     <>
-      {/* Header (preserves original App.jsx structure exactly) */}
-      <header className="flex-none bg-bg-secondary border-b border-border px-4 py-3">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-3">
-            <h2 className="text-lg font-semibold tracking-tight text-text-primary">
-              Traverse
-            </h2>
-            <span className="text-xs text-text-muted">
-              Walk the corpus step by step
-            </span>
-          </div>
-        </div>
+      {/* Form row (no internal section title — the tab already names the section) */}
+      <section className="flex-none bg-bg-secondary border-b border-border px-4 py-3">
         <Controls params={params} onTraverse={handleStreamTraverse} isLoading={isLoading} />
-      </header>
+      </section>
 
       {/* Error banner */}
       {error && (

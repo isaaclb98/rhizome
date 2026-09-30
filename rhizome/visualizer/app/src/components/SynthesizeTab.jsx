@@ -132,18 +132,8 @@ export default function SynthesizeTab({ params, setParams }) {
 
   return (
     <>
-      {/* Header */}
-      <header className="flex-none bg-bg-secondary border-b border-border px-4 py-3">
-        <div className="flex items-center gap-3 mb-3">
-          <h2 className="text-lg font-semibold tracking-tight text-text-primary">
-            Synthesize
-          </h2>
-          <span className="text-xs text-text-muted">
-            Walk the corpus, then forge a thesis from the material
-          </span>
-        </div>
-
-        {/* Inline form */}
+      {/* Form row (no internal section title — the tab already names the section) */}
+      <section className="flex-none bg-bg-secondary border-b border-border px-4 py-3">
         <form
           onSubmit={(e) => { e.preventDefault(); handleSynthesize(); }}
           className="flex items-end gap-4 flex-wrap"
@@ -227,7 +217,7 @@ export default function SynthesizeTab({ params, setParams }) {
             {isLoading ? 'Synthesizing…' : 'Synthesize'}
           </button>
         </form>
-      </header>
+      </section>
 
       {/* Error banner */}
       {error && (
@@ -259,8 +249,15 @@ export default function SynthesizeTab({ params, setParams }) {
               Synthesizing…
             </div>
           ) : (
-            <div className="max-w-xl mx-auto text-text-muted text-sm">
-              Type a seed and hit Synthesize — the walk reads through the corpus, collects fragments, and the LLM forges a thesis from them.
+            <div className="h-full flex items-center justify-center">
+              <div className="max-w-md text-center space-y-2 px-6">
+                <div className="text-text-muted text-sm font-medium">
+                  Your synthesis will appear here
+                </div>
+                <p className="text-text-secondary text-xs leading-relaxed">
+                  The walk reads through the corpus, collects fragments, and the LLM forges a thesis from them.
+                </p>
+              </div>
             </div>
           )}
         </div>

@@ -89,10 +89,10 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen bg-bg-primary overflow-hidden">
-      <header className="flex-none bg-bg-secondary border-b border-border px-4 py-3">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight text-text-primary">
+      <header className="flex-none bg-bg-secondary border-b border-border px-4 py-2.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-baseline gap-2">
+            <h1 className="text-base font-semibold tracking-tight text-text-primary">
               Rhizome
             </h1>
             <span className="text-xs text-text-muted">
@@ -101,7 +101,7 @@ export default function App() {
           </div>
           <ThemeButton theme={theme} onToggle={toggleTheme} />
         </div>
-        <nav className="flex gap-1" role="tablist">
+        <nav className="flex gap-1 mt-3" role="tablist">
           <button
             type="button"
             role="tab"
