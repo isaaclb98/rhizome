@@ -153,6 +153,14 @@ class IdeaRequest(BaseModel):
 
     query: str = Field(..., min_length=1, max_length=500)
     seed: str | None = Field(default=None, max_length=500)
+    inject_seed: bool = Field(
+        default=False,
+        description=(
+            "Feed the seed to the LLM as a synthesis lens. Off by default: the "
+            "seed still starts the walk, but the thesis is argued from the "
+            "fragments alone."
+        ),
+    )
     depth: int = Field(default=8, ge=1, le=100)
     epsilon: float = Field(default=0.1, ge=0.0, le=1.0)
     top_k: int = Field(default=20, ge=1, le=50)
@@ -580,7 +588,7 @@ def idea(
         )
 
     try:
-        thesis = synthesize_thesis(seed, path, llm, req.llm_temperature)
+        thesis = synthesize_thesis(seed, path, llm, req.llm_temperature, req.inject_seed)
     except GatewayError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -670,6 +678,7 @@ async def idea_stream(
                     path_holder,
                     llm,
                     req.llm_temperature,
+                    req.inject_seed,
                 )
             except GatewayError as exc:
                 yield f"data: {json.dumps({'type':'error','detail':f'LLM call failed: {exc}'})}\n\n"

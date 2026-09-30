@@ -698,6 +698,9 @@ class TestIdeaHappyPath:
         assert llm.calls[0]["messages"][0]["role"] == "user"
 
     def test_seed_defaults_to_query(self, client, monkeypatch):
+        """Default behavior: the seed still identifies the run, but it never
+        reaches the LLM. The model argues from the walked fragments alone.
+        """
         _, llm = _patch_idea_dependencies(
             path=[make_traversal_step()], monkeypatch=monkeypatch
         )
@@ -705,7 +708,9 @@ class TestIdeaHappyPath:
             client.post("/idea", json={"query": "the tension"})
         finally:
             app.dependency_overrides.clear()
-        assert "Seed: the tension" in llm.calls[0]["messages"][0]["content"]
+        prompt = llm.calls[0]["messages"][0]["content"]
+        assert "Seed:" not in prompt
+        assert "the tension" not in prompt
 
     def test_seed_overrides_query(self, client, monkeypatch):
         _, llm = _patch_idea_dependencies(
@@ -715,7 +720,38 @@ class TestIdeaHappyPath:
             client.post("/idea", json={"query": "walked concept", "seed": "lens"})
         finally:
             app.dependency_overrides.clear()
-        assert "Seed: lens" in llm.calls[0]["messages"][0]["content"]
+        prompt = llm.calls[0]["messages"][0]["content"]
+        assert "Seed:" not in prompt
+        assert "lens" not in prompt
+
+    def test_inject_seed_passes_seed_to_llm(self, client, monkeypatch):
+        _, llm = _patch_idea_dependencies(
+            path=[make_traversal_step()], monkeypatch=monkeypatch
+        )
+        try:
+            client.post(
+                "/idea",
+                json={"query": "walked concept", "seed": "lens", "inject_seed": True},
+            )
+        finally:
+            app.dependency_overrides.clear()
+        prompt = llm.calls[0]["messages"][0]["content"]
+        assert "Seed: lens" in prompt
+
+    def test_inject_seed_false_omits_seed(self, client, monkeypatch):
+        _, llm = _patch_idea_dependencies(
+            path=[make_traversal_step()], monkeypatch=monkeypatch
+        )
+        try:
+            client.post(
+                "/idea",
+                json={"query": "walked concept", "seed": "lens", "inject_seed": False},
+            )
+        finally:
+            app.dependency_overrides.clear()
+        prompt = llm.calls[0]["messages"][0]["content"]
+        assert "Seed:" not in prompt
+        assert "lens" not in prompt
 
     def test_llm_model_override(self, client, monkeypatch):
         _, llm = _patch_idea_dependencies(

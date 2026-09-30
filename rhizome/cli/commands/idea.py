@@ -13,7 +13,7 @@ from rhizome.traversal.engine import TraversalError, TraversalStep
 from rhizome.vectorstore.client import VectorStoreClient
 from rhizome.vectorstore.collection import CollectionManager
 
-PROMPT = """You are given fragments collected by a random walk through a vector space of documents. They are deliberately disjointed — some will be unrelated to each other and to the seed. That is the point.
+PROMPT = """You are given fragments collected by a random walk through a vector space of documents. They are deliberately disjointed — {disjointness}. That is the point.
 
 The material may come from any domain. Do not assume a discipline, a period, or a tradition; let the fragments establish what the subject is.
 
@@ -22,9 +22,7 @@ Write one thesis: a single argument with a real claim, built by synthesizing thi
 Do not summarize the fragments in order. Do not list ideas. Do not comment on the traversal. Argue one thing, and let the collisions in the material carry it. Cite the sources you actually used, by the titles given.
 
 Voice: assert. Never use first person — no "I", "we", "my", "us", in any form, including inside quotations of your own reasoning. Never hedge or narrate your process: no "I assume", "I read this as", "it seems", "one might argue", "arguably", "I take X to mean". State every claim as fact and commit to it. If the material is thin, say so as a property of the material, not as a confession about your uncertainty.
-
-Seed: {seed}
-
+{seed_block}
 Fragments, in walk order:
 
 {fragments}
@@ -67,7 +65,7 @@ def material_path(output: str) -> str:
     return str(path.with_suffix("")) + ".material.md"
 
 
-def render_material(seed: str, path, config) -> str:
+def render_material(seed: str, path, config, inject_seed: bool = False) -> str:
     """Render the walked fragments as a markdown audit trail.
 
     Records the knobs and every step's provenance so a thesis can be traced
@@ -78,6 +76,7 @@ def render_material(seed: str, path, config) -> str:
         seed: The starting concept.
         path: Ordered list of TraversalStep.
         config: The TraversalConfig used for the walk.
+        inject_seed: Whether the seed was fed to the LLM as a synthesis lens.
 
     Returns:
         Markdown string describing the run and its fragments.
@@ -93,6 +92,8 @@ def render_material(seed: str, path, config) -> str:
         f"temperature={config.temperature}, "
         f"max_same_article_consecutive={config.max_same_article_consecutive}",
         "",
+        f"Seed injected into prompt: {inject_seed}",
+        "",
     ]
     for index, step in enumerate(path, start=1):
         marker = " — forced jump" if step.forced_jump else ""
@@ -104,17 +105,31 @@ def render_material(seed: str, path, config) -> str:
     return "\n".join(lines)
 
 
-def build_prompt(seed: str, path) -> str:
+def build_prompt(seed: str, path, inject_seed: bool = False) -> str:
     """Assemble the synthesis prompt from a seed and a traversal path.
 
     Args:
-        seed: The starting concept.
+        seed: The starting concept. Only reaches the model when
+            ``inject_seed`` is set.
         path: Ordered list of TraversalStep.
+        inject_seed: Whether to hand the seed to the LLM as a synthesis lens.
+            Off by default — the walk's collisions are the intended material,
+            and naming the seed up front steers the thesis toward it.
 
     Returns:
         The prompt string.
     """
-    return PROMPT.format(seed=seed, fragments=format_fragments(path))
+    seed_block = f"\nSeed: {seed}\n" if inject_seed else ""
+    disjointness = (
+        "some will be unrelated to each other and to the seed"
+        if inject_seed
+        else "some will be unrelated to each other"
+    )
+    return PROMPT.format(
+        seed_block=seed_block,
+        disjointness=disjointness,
+        fragments=format_fragments(path),
+    )
 
 
 def synthesize_idea(
@@ -125,6 +140,7 @@ def synthesize_idea(
     vector_store: VectorStoreClient,
     llm,
     llm_temperature: float,
+    inject_seed: bool = False,
 ) -> tuple[str, list, dict]:
     """Run a traversal then synthesize a thesis from its material.
 
@@ -135,13 +151,16 @@ def synthesize_idea(
     Args:
         query: Starting concept for the traversal (also used as the seed if
             the caller passed the same string for both).
-        seed: Concept handed to the LLM as the synthesis lens.
+        seed: Concept handed to the LLM as the synthesis lens when
+            ``inject_seed`` is set.
         traversal_config: Resolved traversal knobs.
         embedder: Anything implementing the ``Embedder`` protocol.
         vector_store: A configured Qdrant-backed vector store.
         llm: Anything with a ``complete(messages, temperature) -> str``
             method (GatewayLLM or a stub).
         llm_temperature: Sampling temperature for the synthesis call.
+        inject_seed: Whether the seed reaches the prompt at all. Off by
+            default so the model argues from the material alone.
 
     Returns:
         Tuple of (thesis, path, stats) where ``stats`` is a dict with
@@ -161,7 +180,7 @@ def synthesize_idea(
             "concept too specific."
         )
 
-    thesis = synthesize_thesis(seed, path, llm, llm_temperature)
+    thesis = synthesize_thesis(seed, path, llm, llm_temperature, inject_seed)
     stats = compute_stats(path, traversal_config)
     return thesis, path, stats
 
@@ -188,15 +207,17 @@ def run_traversal(query, traversal_config, embedder, vector_store) -> list:
     return engine.traverse(query)
 
 
-def synthesize_thesis(seed, path, llm, llm_temperature: float) -> str:
+def synthesize_thesis(seed, path, llm, llm_temperature: float, inject_seed: bool = False) -> str:
     """Hand a path to an LLM and return the synthesized thesis text.
 
     Args:
-        seed: Concept handed to the LLM as the synthesis lens.
+        seed: Concept handed to the LLM as the synthesis lens when
+            ``inject_seed`` is set; otherwise it only identifies the run.
         path: Ordered list of TraversalStep (the walk material).
         llm: Anything with a ``complete(messages, temperature) -> str``
             method (GatewayLLM or a stub).
         llm_temperature: Sampling temperature for the synthesis call.
+        inject_seed: Whether the seed reaches the prompt at all.
 
     Returns:
         Stripped thesis text.
@@ -205,7 +226,7 @@ def synthesize_thesis(seed, path, llm, llm_temperature: float) -> str:
         GatewayError: The LLM call failed.
     """
     return llm.complete(
-        [{"role": "user", "content": build_prompt(seed, path)}],
+        [{"role": "user", "content": build_prompt(seed, path, inject_seed)}],
         temperature=llm_temperature,
     ).strip()
 
@@ -255,6 +276,12 @@ def compute_stats(path, traversal_config) -> dict:
     default=False,
     help="Also write the walked fragments to '<output>.material.md' so the run is traceable. Requires -o.",
 )
+@click.option(
+    "--inject-seed",
+    type=bool,
+    default=False,
+    help="Feed the seed concept to the LLM as a synthesis lens (true/false). Off by default: the model argues from the walked material alone.",
+)
 def idea(
     concept: str,
     depth: int | None,
@@ -266,6 +293,7 @@ def idea(
     llm_temperature: float | None,
     output: str | None,
     save_material: bool,
+    inject_seed: bool,
 ):
     """Synthesize a thesis from a traversal of the corpus.
 
@@ -371,13 +399,13 @@ def idea(
             raise click.Abort()
         side = material_path(output)
         with open(side, "w", encoding="utf-8") as handle:
-            handle.write(render_material(concept, path, config))
+            handle.write(render_material(concept, path, config, inject_seed))
         click.echo(f"Material written to: {side}", err=True)
 
     click.echo(f"Synthesizing with {llm.model}…", err=True)
 
     try:
-        thesis = synthesize_thesis(concept, path, llm, llm_temperature)
+        thesis = synthesize_thesis(concept, path, llm, llm_temperature, inject_seed)
     except GatewayError as exc:
         click.echo(f"LLM error: {exc}", err=True)
         raise click.Abort()

@@ -269,10 +269,32 @@ class TestPromptBuilding:
         assert "https://en.wikipedia.org/wiki/Henri_Bergson" in out
 
     def test_prompt_contains_seed_and_text(self):
-        prompt = build_prompt("structure and event", [make_step(text="the fragment body")])
+        prompt = build_prompt("structure and event", [make_step(text="the fragment body")], inject_seed=True)
         assert "structure and event" in prompt
         assert "the fragment body" in prompt
         assert "one thesis" in prompt
+
+    def test_prompt_omits_seed_by_default(self):
+        """The seed never reaches the model unless the caller opts in.
+
+        Naming the seed up front hands the model the intended thesis before it
+        reads a fragment, which defeats the collisions the walk exists to
+        produce.
+        """
+        prompt = build_prompt("structure and event", [make_step(text="the fragment body")])
+        assert "structure and event" not in prompt
+        assert "Seed:" not in prompt
+        assert "the fragment body" in prompt
+
+    def test_prompt_does_not_reference_a_withheld_seed(self):
+        """No dangling mention of a seed the model was never given."""
+        prompt = build_prompt("structure and event", [make_step()])
+        assert "to the seed" not in prompt
+        assert "some will be unrelated to each other" in prompt
+
+    def test_prompt_references_seed_only_when_injected(self):
+        prompt = build_prompt("seed", [make_step()], inject_seed=True)
+        assert "unrelated to each other and to the seed" in prompt
 
     def test_prompt_instructs_against_listing(self):
         prompt = build_prompt("seed", [make_step()])
@@ -442,6 +464,26 @@ class TestIdeaCommand:
         assert content.startswith("# seed")
         assert "The thesis text." in content
         assert result.stdout == ""
+
+    def test_seed_reaches_prompt_only_when_flag_set(self, stubbed):
+        CliRunner().invoke(main, ["idea", "structure and event"])
+        assert "structure and event" not in stubbed["prompt"]
+        assert "Seed:" not in stubbed["prompt"]
+
+        CliRunner().invoke(main, ["idea", "structure and event", "--inject-seed", "true"])
+        assert "Seed: structure and event" in stubbed["prompt"]
+
+    def test_inject_seed_accepts_false(self, stubbed):
+        CliRunner().invoke(main, ["idea", "seed", "--inject-seed", "false"])
+        assert "Seed:" not in stubbed["prompt"]
+
+    def test_inject_seed_requires_a_value(self, stubbed):
+        result = CliRunner().invoke(main, ["idea", "seed", "--inject-seed"])
+        assert result.exit_code != 0
+        assert "requires an argument" in result.output
+
+    def test_help_lists_inject_seed(self):
+        assert "--inject-seed" in CliRunner().invoke(main, ["idea", "--help"]).output
 
     def test_knob_overrides_reach_engine(self, stubbed):
         CliRunner().invoke(
