@@ -19,7 +19,7 @@ class TestRhizomeConfig:
         )
         assert cfg.qdrant_url == "http://localhost:6333"
         assert cfg.qdrant_collection == "test-collection"
-        assert cfg.default_depth == 8
+        assert cfg.default_depth == 10
         assert cfg.epsilon == 0.1
 
     def test_embedder_type_normalized(self):
@@ -39,7 +39,7 @@ class TestRhizomeConfig:
                 EMBEDDER_TYPE="invalid",
                 OPENAI_API_KEY="sk-test",
             )
-        assert "EMBEDDER_TYPE must be 'openai' or 'huggingface'" in str(exc_info.value)
+        assert "EMBEDDER_TYPE must be 'openai', 'huggingface', or 'gateway'" in str(exc_info.value)
 
     def test_resolve_env_var_syntax(self):
         """${VAR} syntax resolves to environment variable value."""

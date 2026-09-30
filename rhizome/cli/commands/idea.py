@@ -4,24 +4,29 @@ from pathlib import Path
 
 import click
 
-from rhizome.config import get_config
-from rhizome.embedder import EmbeddingError
-from rhizome.gateway import GatewayEmbedder, GatewayError, GatewayLLM
+from rhizome.config import RhizomeConfig, get_config
+from rhizome.embedder import Embedder, EmbeddingError
+from rhizome.gateway import GatewayEmbedder, GatewayError, GatewayLLM, parse_thesis_json
 from rhizome.traversal.config import TraversalConfig
 from rhizome.traversal.engine import TraversalEngine
-from rhizome.traversal.engine import TraversalError
+from rhizome.traversal.engine import TraversalError, TraversalStep
 from rhizome.vectorstore.client import VectorStoreClient
 from rhizome.vectorstore.collection import CollectionManager
 
-PROMPT = """You are given fragments collected by a random walk through a vector space of Wikipedia. They are deliberately disjointed — some will be unrelated to each other and to the seed. That is the point.
+PROMPT = """You are given fragments collected by a random walk through a vector space of documents. They are deliberately disjointed — {disjointness}. That is the point.
 
-Write one thesis: a single argument with a real claim, built by synthesizing this material. Use the fragments as evidence and as raw material. Where you need connective tissue the fragments do not supply — lineage, framing, a concept you know — supply it from your own knowledge and say which you are doing.
+The material may come from any domain. Do not assume a discipline, a period, or a tradition; let the fragments establish what the subject is.
 
-Do not summarize the fragments in order. Do not list ideas. Do not comment on the traversal. Argue one thing, and let the collisions in the material carry it. Cite the articles you actually used.
+Return a JSON object with exactly two fields:
 
-Seed: {seed}
+  - "main_thesis": the single-sentence claim the argument supports. One sentence. It must be the same claim that unifies everything in "content" — not a section heading, not a topic label, not a summary.
+  - "content": the prose that argues for "main_thesis". Use the fragments as evidence and as raw material. Where you need connective tissue the fragments do not supply — context, framing, a concept you know — supply it from your own knowledge, woven in as established fact.
 
-Fragments, in walk order:
+Do not summarize the fragments in order. Do not list ideas. Do not comment on the traversal. Argue one thing, and let the collisions in the material carry it.
+
+Voice: assert. Never use first person — no "I", "we", "my", "us", in any form, including inside quotations of your own reasoning. Never hedge or narrate your process: no "I assume", "I read this as", "it seems", "one might argue", "arguably", "I take X to mean". State every claim as fact and commit to it. If the material is thin, say so as a property of the material, not as a confession about your uncertainty. The voice rule applies to "content"; "main_thesis" is a one-sentence claim and must assert it the same way.
+
+{seed_block}Fragments, in walk order:
 
 {fragments}
 """
@@ -63,7 +68,7 @@ def material_path(output: str) -> str:
     return str(path.with_suffix("")) + ".material.md"
 
 
-def render_material(seed: str, path, config) -> str:
+def render_material(seed: str, path, config, inject_seed: bool = False) -> str:
     """Render the walked fragments as a markdown audit trail.
 
     Records the knobs and every step's provenance so a thesis can be traced
@@ -74,6 +79,7 @@ def render_material(seed: str, path, config) -> str:
         seed: The starting concept.
         path: Ordered list of TraversalStep.
         config: The TraversalConfig used for the walk.
+        inject_seed: Whether the seed was fed to the LLM as a synthesis lens.
 
     Returns:
         Markdown string describing the run and its fragments.
@@ -89,6 +95,8 @@ def render_material(seed: str, path, config) -> str:
         f"temperature={config.temperature}, "
         f"max_same_article_consecutive={config.max_same_article_consecutive}",
         "",
+        f"Seed injected into prompt: {inject_seed}",
+        "",
     ]
     for index, step in enumerate(path, start=1):
         marker = " — forced jump" if step.forced_jump else ""
@@ -100,17 +108,165 @@ def render_material(seed: str, path, config) -> str:
     return "\n".join(lines)
 
 
-def build_prompt(seed: str, path) -> str:
+def build_prompt(seed: str, path, inject_seed: bool = False) -> str:
     """Assemble the synthesis prompt from a seed and a traversal path.
 
     Args:
-        seed: The starting concept.
+        seed: The starting concept. Only reaches the model when
+            ``inject_seed`` is set.
         path: Ordered list of TraversalStep.
+        inject_seed: Whether to hand the seed to the LLM as a synthesis lens.
+            Off by default — the walk's collisions are the intended material,
+            and naming the seed up front steers the thesis toward it.
 
     Returns:
         The prompt string.
     """
-    return PROMPT.format(seed=seed, fragments=format_fragments(path))
+    seed_block = f"\nSeed: {seed}\n" if inject_seed else ""
+    disjointness = (
+        "some will be unrelated to each other and to the seed"
+        if inject_seed
+        else "some will be unrelated to each other"
+    )
+    return PROMPT.format(
+        seed_block=seed_block,
+        disjointness=disjointness,
+        fragments=format_fragments(path),
+    )
+
+
+def synthesize_idea(
+    query: str,
+    seed: str,
+    traversal_config: TraversalConfig,
+    embedder: Embedder,
+    vector_store: VectorStoreClient,
+    llm,
+    llm_temperature: float,
+    inject_seed: bool = False,
+) -> tuple[dict, list, dict]:
+    """Run a traversal then synthesize a thesis from its material.
+
+    This is the core synthesis routine shared by the CLI command and the
+    HTTP API. It performs no I/O beyond calling the supplied embedder,
+    vector store, and LLM, so it can be invoked from any process.
+
+    Args:
+        query: Starting concept for the traversal (also used as the seed if
+            the caller passed the same string for both).
+        seed: Concept handed to the LLM as the synthesis lens when
+            ``inject_seed`` is set.
+        traversal_config: Resolved traversal knobs.
+        embedder: Anything implementing the ``Embedder`` protocol.
+        vector_store: A configured Qdrant-backed vector store.
+        llm: Anything with a
+            ``complete(messages, *, temperature, max_tokens, retries, response_format) -> str``
+            method (GatewayLLM or a stub).
+        llm_temperature: Sampling temperature for the synthesis call.
+        inject_seed: Whether the seed reaches the prompt at all. Off by
+            default so the model argues from the material alone.
+
+    Returns:
+        Tuple of (thesis, path, stats) where ``thesis`` is
+        ``{"main_thesis": str, "content": str}`` and ``stats`` is a dict
+        with ``depth``, ``epsilon``, ``top_k``, ``temperature``,
+        ``max_same_article_consecutive``, ``forced_jumps``, and ``articles``.
+
+    Raises:
+        TraversalError: The walk could not be completed.
+        EmbeddingError: The embedder rejected a request.
+        GatewayError: The LLM call failed.
+        ValueError: The walk produced an empty path.
+    """
+    path = run_traversal(query, traversal_config, embedder, vector_store)
+    if not path:
+        raise ValueError(
+            "Walk produced no path. The corpus may be too small or the "
+            "concept too specific."
+        )
+
+    thesis = synthesize_thesis(seed, path, llm, llm_temperature, inject_seed)
+    stats = compute_stats(path, traversal_config)
+    return thesis, path, stats
+
+
+def run_traversal(query, traversal_config, embedder, vector_store) -> list:
+    """Run a traversal and return its path. Pure pass-through to the engine.
+
+    Args:
+        query: Starting concept for the walk.
+        traversal_config: Resolved traversal knobs.
+        embedder: Anything implementing the ``Embedder`` protocol.
+        vector_store: A configured Qdrant-backed vector store.
+
+    Returns:
+        Ordered list of TraversalStep.
+
+    Raises:
+        TraversalError: The walk could not be completed.
+        EmbeddingError: The embedder rejected a request.
+    """
+    engine = TraversalEngine(
+        embedder=embedder, vector_store=vector_store, config=traversal_config
+    )
+    return engine.traverse(query)
+
+
+def synthesize_thesis(
+    seed, path, llm, llm_temperature: float, inject_seed: bool = False
+) -> dict:
+    """Hand a path to an LLM and return the structured thesis.
+
+    The LLM is asked to respond in JSON mode with ``{"main_thesis", "content"}``;
+    ``parse_thesis_json`` is then applied to the reply so a sloppy model that
+    wraps the object in a fence, trails prose after it, or omits a field still
+    produces a usable dict.
+
+    Args:
+        seed: Concept handed to the LLM as the synthesis lens when
+            ``inject_seed`` is set; otherwise it only identifies the run.
+        path: Ordered list of TraversalStep (the walk material).
+        llm: Anything with a
+            ``complete(messages, *, temperature, max_tokens, retries, response_format) -> str``
+            method (GatewayLLM or a stub).
+        llm_temperature: Sampling temperature for the synthesis call.
+        inject_seed: Whether the seed reaches the prompt at all.
+
+    Returns:
+        ``{"main_thesis": str, "content": str}``. Either may be empty if the
+        model slipped and the parser could not recover it.
+
+    Raises:
+        GatewayError: The LLM call failed.
+    """
+    raw = llm.complete(
+        [{"role": "user", "content": build_prompt(seed, path, inject_seed)}],
+        temperature=llm_temperature,
+        response_format={"type": "json_object"},
+    )
+    return parse_thesis_json(raw)
+
+
+def compute_stats(path, traversal_config) -> dict:
+    """Summarize a traversal run as a small dict.
+
+    Args:
+        path: Ordered list of TraversalStep.
+        traversal_config: Resolved traversal knobs.
+
+    Returns:
+        Dict with ``depth``, ``epsilon``, ``top_k``, ``temperature``,
+        ``max_same_article_consecutive``, ``forced_jumps``, ``articles``.
+    """
+    return {
+        "depth": traversal_config.depth,
+        "epsilon": traversal_config.epsilon,
+        "top_k": traversal_config.top_k,
+        "temperature": traversal_config.temperature,
+        "max_same_article_consecutive": traversal_config.max_same_article_consecutive,
+        "forced_jumps": sum(1 for step in path if step.forced_jump),
+        "articles": len({step.article_title for step in path}),
+    }
 
 
 @click.command()
@@ -136,6 +292,12 @@ def build_prompt(seed: str, path) -> str:
     default=False,
     help="Also write the walked fragments to '<output>.material.md' so the run is traceable. Requires -o.",
 )
+@click.option(
+    "--inject-seed",
+    type=bool,
+    default=False,
+    help="Feed the seed concept to the LLM as a synthesis lens (true/false). Off by default: the model argues from the walked material alone.",
+)
 def idea(
     concept: str,
     depth: int | None,
@@ -147,6 +309,7 @@ def idea(
     llm_temperature: float | None,
     output: str | None,
     save_material: bool,
+    inject_seed: bool,
 ):
     """Synthesize a thesis from a traversal of the corpus.
 
@@ -217,10 +380,15 @@ def idea(
         temperature=temperature,
         max_same_article_consecutive=max_same_article_consecutive,
     )
-    engine = TraversalEngine(embedder=embedder, vector_store=vector_store, config=config)
+
+    llm = GatewayLLM(
+        base_url=cfg.llm_gateway_url,
+        model=model or cfg.llm_model,
+        api_key=cfg.llm_gateway_api_key,
+    )
 
     try:
-        path = engine.traverse(concept)
+        path = run_traversal(concept, config, embedder, vector_store)
     except TraversalError as exc:
         click.echo(f"Traversal error: {exc}", err=True)
         raise click.Abort()
@@ -247,26 +415,24 @@ def idea(
             raise click.Abort()
         side = material_path(output)
         with open(side, "w", encoding="utf-8") as handle:
-            handle.write(render_material(concept, path, config))
+            handle.write(render_material(concept, path, config, inject_seed))
         click.echo(f"Material written to: {side}", err=True)
 
-    llm = GatewayLLM(
-        base_url=cfg.llm_gateway_url,
-        model=model or cfg.llm_model,
-        api_key=cfg.llm_gateway_api_key,
-    )
     click.echo(f"Synthesizing with {llm.model}…", err=True)
 
     try:
-        thesis = llm.complete(
-            [{"role": "user", "content": build_prompt(concept, path)}],
-            temperature=llm_temperature,
-        )
+        thesis = synthesize_thesis(concept, path, llm, llm_temperature, inject_seed)
     except GatewayError as exc:
         click.echo(f"LLM error: {exc}", err=True)
         raise click.Abort()
 
-    document = f"# {concept}\n\n{thesis.strip()}\n"
+    main_thesis = thesis.get("main_thesis", "").strip()
+    content = thesis.get("content", "").strip()
+    if main_thesis:
+        document = f"# {concept}\n\n## Thesis\n\n{main_thesis}\n\n## Argument\n\n{content}\n"
+    else:
+        # Model slipped on the schema — write what we have.
+        document = f"# {concept}\n\n{content}\n"
 
     if output:
         with open(output, "w", encoding="utf-8") as handle:

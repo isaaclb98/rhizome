@@ -9,6 +9,9 @@ Contract coverage:
   /traverse    — happy path, missing collection, traversal error, embedding
                  error, validation (422) for out-of-range params
   /traverse/stream — emitted SSE events are well-formed
+  /idea        — happy path, missing collection, gateway missing, LLM error,
+                 missing seed defaults to query
+  /idea/stream — step, thesis, done events in order, error and cancel paths
 
 Each test asserts shape and status, not implementation details.
 """
@@ -596,3 +599,449 @@ class TestTraverseStream:
         finally:
             app.dependency_overrides.clear()
         assert response.status_code == 503
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# /idea — synchronous thesis synthesis
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class FakeLLM:
+    """Drop-in for GatewayLLM.complete() used by /idea.
+
+    Returns the canonical JSON-mode envelope ``{"main_thesis": ..., "content": ...}``
+    so the parser gets the same shape it sees in production.
+    """
+
+    def __init__(self, text: str = "A synthesized thesis.") -> None:
+        self.model = "fake-model"
+        self._text = text
+        self.calls: list = []
+
+    def complete(self, messages, temperature, **kwargs):
+        self.calls.append({"messages": messages, "temperature": temperature})
+        return self._as_json()
+
+    def _as_json(self) -> str:
+        """Wrap the configured text in the production JSON envelope.
+
+        ``main_thesis`` is derived from the first sentence of ``_text`` so
+        tests that don't override the helper still exercise both fields; if
+        there is no sentence boundary, ``main_thesis`` is empty and the
+        parser returns the whole string as ``content``.
+        """
+        import json as _json
+        body = self._text.strip()
+        # Find the first sentence terminator (. ! ?) followed by whitespace
+        # or end-of-string. "A synthesized thesis." has none, so main_thesis
+        # stays empty and the whole string lands in content (matches what
+        # parse_thesis_json would produce from a sloppy non-JSON reply).
+        import re as _re
+        m = _re.search(r"[.!?](?:\s|$)", body)
+        if m and m.start() < 200:
+            main = body[: m.end()].rstrip()
+            rest = body[m.end():].lstrip()
+        else:
+            main = ""
+            rest = body
+        return _json.dumps({"main_thesis": main, "content": rest})
+
+
+def _patch_idea_dependencies(
+    *,
+    path: list[TraversalStep] | None = None,
+    traverse_raises: Exception | None = None,
+    llm_text: str = "A synthesized thesis.",
+    llm_raises: Exception | None = None,
+    vector_store: FakeVectorStore | None = None,
+    embedder: Embedder | None = None,
+    config: RhizomeConfig | None = None,
+    monkeypatch=None,
+    also_patch_api_engine: bool = False,
+):
+    """Wire the FastAPI deps to fakes. Returns (engine, llm).
+
+    The /idea endpoint calls ``run_traversal`` from the CLI module, so the
+    engine is monkeypatched at ``rhizome.cli.commands.idea.TraversalEngine``.
+    The /idea/stream endpoint builds ``TraversalEngine`` in the API module,
+    so it needs ``also_patch_api_engine=True`` to additionally patch
+    ``rhizome.api.main.TraversalEngine``.
+    """
+    fake_engine = FakeTraversalEngine(path=path, traverse_raises=traverse_raises)
+    fake_llm = FakeLLM(text=llm_text)
+    if llm_raises is not None:
+        fake_llm.complete = lambda messages, temperature, **kwargs: (_ for _ in ()).throw(llm_raises)
+
+    if monkeypatch is not None:
+        monkeypatch.setattr(
+            "rhizome.cli.commands.idea.TraversalEngine",
+            lambda embedder, vector_store, config: fake_engine,
+        )
+        if also_patch_api_engine:
+            monkeypatch.setattr(
+                "rhizome.api.main.TraversalEngine",
+                lambda embedder, vector_store, config: fake_engine,
+            )
+        monkeypatch.setattr(
+            "rhizome.api.main._resolve_llm",
+            lambda config, override_model=None, **kwargs: _apply_model_override(fake_llm, override_model),
+        )
+
+    app.dependency_overrides[get_embedder_dep] = lambda: embedder or FakeEmbedder()
+    app.dependency_overrides[get_vector_store_dep] = lambda: vector_store or FakeVectorStore(
+        collection_exists=True
+    )
+    app.dependency_overrides[get_config_dep] = lambda: config or make_config(
+        llm_gateway_url="http://fake-gateway:30128"
+    )
+    return fake_engine, fake_llm
+
+
+def _apply_model_override(fake_llm, override_model):
+    """Mirror production behavior: honor a per-request model override."""
+    if override_model:
+        fake_llm.model = override_model
+    return fake_llm
+
+
+class TestIdeaHappyPath:
+    def test_returns_thesis_path_and_stats(self, client, monkeypatch):
+        step = make_traversal_step()
+        _, llm = _patch_idea_dependencies(
+            path=[step], monkeypatch=monkeypatch
+        )
+        try:
+            response = client.post("/idea", json={"query": "the seed"})
+        finally:
+            app.dependency_overrides.clear()
+        assert response.status_code == 200
+        body = response.json()
+        # FakeLLM._as_json splits on first ". " — "A synthesized thesis." has
+        # none, so the whole string lands in main_thesis and content is empty.
+        assert body["main_thesis"] == "A synthesized thesis."
+        assert body["content"] == ""
+        assert len(body["path"]) == 1
+        assert body["path"][0]["article_title"] == "Modernism"
+        assert body["stats"]["articles"] == 1
+        assert body["stats"]["forced_jumps"] == 0
+        assert body["stats"]["model"] == "fake-model"
+        assert len(llm.calls) == 1
+        assert llm.calls[0]["messages"][0]["role"] == "user"
+
+    def test_seed_defaults_to_query(self, client, monkeypatch):
+        """Default behavior: the seed still identifies the run, but it never
+        reaches the LLM. The model argues from the walked fragments alone.
+        """
+        _, llm = _patch_idea_dependencies(
+            path=[make_traversal_step()], monkeypatch=monkeypatch
+        )
+        try:
+            client.post("/idea", json={"query": "the tension"})
+        finally:
+            app.dependency_overrides.clear()
+        prompt = llm.calls[0]["messages"][0]["content"]
+        assert "Seed:" not in prompt
+        assert "the tension" not in prompt
+
+    def test_seed_overrides_query(self, client, monkeypatch):
+        _, llm = _patch_idea_dependencies(
+            path=[make_traversal_step()], monkeypatch=monkeypatch
+        )
+        try:
+            client.post("/idea", json={"query": "walked concept", "seed": "lens"})
+        finally:
+            app.dependency_overrides.clear()
+        prompt = llm.calls[0]["messages"][0]["content"]
+        assert "Seed:" not in prompt
+        assert "lens" not in prompt
+
+    def test_inject_seed_passes_seed_to_llm(self, client, monkeypatch):
+        _, llm = _patch_idea_dependencies(
+            path=[make_traversal_step()], monkeypatch=monkeypatch
+        )
+        try:
+            client.post(
+                "/idea",
+                json={"query": "walked concept", "seed": "lens", "inject_seed": True},
+            )
+        finally:
+            app.dependency_overrides.clear()
+        prompt = llm.calls[0]["messages"][0]["content"]
+        assert "Seed: lens" in prompt
+
+    def test_inject_seed_false_omits_seed(self, client, monkeypatch):
+        _, llm = _patch_idea_dependencies(
+            path=[make_traversal_step()], monkeypatch=monkeypatch
+        )
+        try:
+            client.post(
+                "/idea",
+                json={"query": "walked concept", "seed": "lens", "inject_seed": False},
+            )
+        finally:
+            app.dependency_overrides.clear()
+        prompt = llm.calls[0]["messages"][0]["content"]
+        assert "Seed:" not in prompt
+        assert "lens" not in prompt
+
+    def test_llm_model_override(self, client, monkeypatch):
+        _, llm = _patch_idea_dependencies(
+            path=[make_traversal_step()], monkeypatch=monkeypatch
+        )
+        # _patch_idea_dependencies patches _resolve_llm to honor the per-request
+        # model override, mirroring production.
+        try:
+            client.post("/idea", json={"query": "x", "llm_model": "isaac-quality"})
+        finally:
+            app.dependency_overrides.clear()
+        assert llm.model == "isaac-quality"
+
+
+class TestIdeaErrorPaths:
+    def test_400_when_collection_missing(self, client, monkeypatch):
+        _patch_idea_dependencies(
+            path=[make_traversal_step()],
+            vector_store=FakeVectorStore(collection_exists=False),
+            monkeypatch=monkeypatch,
+        )
+        try:
+            response = client.post("/idea", json={"query": "x"})
+        finally:
+            app.dependency_overrides.clear()
+        assert response.status_code == 400
+        assert "not found" in response.json()["detail"]
+
+    def test_503_when_qdrant_unreachable(self, client, monkeypatch):
+        _patch_idea_dependencies(
+            vector_store=FakeVectorStore(get_collection_raises=True),
+            monkeypatch=monkeypatch,
+        )
+        try:
+            response = client.post("/idea", json={"query": "x"})
+        finally:
+            app.dependency_overrides.clear()
+        assert response.status_code == 503
+
+    def test_503_when_gateway_unconfigured(self, client, monkeypatch):
+        _patch_idea_dependencies(
+            config=make_config(llm_gateway_url=""),
+            monkeypatch=monkeypatch,
+        )
+        try:
+            response = client.post("/idea", json={"query": "x"})
+        finally:
+            app.dependency_overrides.clear()
+        assert response.status_code == 503
+        assert "LLM gateway" in response.json()["detail"]
+
+    def test_500_on_traversal_error(self, client, monkeypatch):
+        from rhizome.traversal.engine import TraversalError
+        _patch_idea_dependencies(
+            traverse_raises=TraversalError("walk blew up"),
+            monkeypatch=monkeypatch,
+        )
+        try:
+            response = client.post("/idea", json={"query": "x"})
+        finally:
+            app.dependency_overrides.clear()
+        assert response.status_code == 500
+        assert "walk blew up" in response.json()["detail"]
+
+    def test_400_on_empty_path(self, client, monkeypatch):
+        _patch_idea_dependencies(path=[], monkeypatch=monkeypatch)
+        try:
+            response = client.post("/idea", json={"query": "x"})
+        finally:
+            app.dependency_overrides.clear()
+        assert response.status_code == 400
+        assert "no path" in response.json()["detail"]
+
+    def test_502_on_llm_error(self, client, monkeypatch):
+        from rhizome.gateway import GatewayError
+        _patch_idea_dependencies(
+            path=[make_traversal_step()],
+            llm_raises=GatewayError("502 Bad Gateway: upstream down"),
+            monkeypatch=monkeypatch,
+        )
+        try:
+            response = client.post("/idea", json={"query": "x"})
+        finally:
+            app.dependency_overrides.clear()
+        assert response.status_code == 502
+        assert "LLM call failed" in response.json()["detail"]
+
+
+class TestIdeaValidation:
+    def test_422_on_missing_query(self, client):
+        app.dependency_overrides[get_embedder_dep] = lambda: FakeEmbedder()
+        app.dependency_overrides[get_vector_store_dep] = lambda: FakeVectorStore(
+            collection_exists=True
+        )
+        app.dependency_overrides[get_config_dep] = lambda: make_config(
+            llm_gateway_url="http://fake-gateway:30128"
+        )
+        try:
+            response = client.post("/idea", json={})
+        finally:
+            app.dependency_overrides.clear()
+        assert response.status_code == 422
+
+    def test_422_on_epsilon_out_of_range(self, client):
+        app.dependency_overrides[get_embedder_dep] = lambda: FakeEmbedder()
+        app.dependency_overrides[get_vector_store_dep] = lambda: FakeVectorStore(
+            collection_exists=True
+        )
+        app.dependency_overrides[get_config_dep] = lambda: make_config(
+            llm_gateway_url="http://fake-gateway:30128"
+        )
+        try:
+            response = client.post("/idea", json={"query": "x", "epsilon": 5.0})
+        finally:
+            app.dependency_overrides.clear()
+        assert response.status_code == 422
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# /idea/stream — SSE walk + thesis
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestIdeaStreamHappyPath:
+    def test_emits_step_thesis_done_in_order(self, client, monkeypatch):
+        steps = [
+            make_traversal_step(chunk_id=f"c-{i}", article_title=f"Article {i}")
+            for i in range(3)
+        ]
+        _patch_idea_dependencies(
+            path=steps,
+            llm_text="A streamed thesis body.",
+            monkeypatch=monkeypatch,
+            also_patch_api_engine=True,
+        )
+        try:
+            with client.stream(
+                "POST", "/idea/stream", json={"query": "x", "depth": 3}
+            ) as response:
+                assert response.status_code == 200
+                events = self._read_sse_events(response)
+        finally:
+            app.dependency_overrides.clear()
+
+        types = [e["type"] for e in events]
+        assert types == ["step", "step", "step", "thesis", "done"], types
+        assert events[3]["main_thesis"] == "A streamed thesis body."
+        assert events[3]["content"] == ""
+        assert events[4]["stats"]["articles"] == 3
+        assert events[4]["stats"]["forced_jumps"] == 0
+
+    def test_empty_path_emits_error(self, client, monkeypatch):
+        _patch_idea_dependencies(
+            path=[],
+            monkeypatch=monkeypatch,
+            also_patch_api_engine=True,
+        )
+        try:
+            with client.stream("POST", "/idea/stream", json={"query": "x"}) as response:
+                events = self._read_sse_events(response)
+        finally:
+            app.dependency_overrides.clear()
+        types = [e["type"] for e in events]
+        assert types == ["error"]
+        assert "no path" in events[0]["detail"]
+
+    def test_llm_error_emits_error_event(self, client, monkeypatch):
+        from rhizome.gateway import GatewayError
+        _patch_idea_dependencies(
+            path=[make_traversal_step()],
+            llm_raises=GatewayError("upstream timeout"),
+            monkeypatch=monkeypatch,
+            also_patch_api_engine=True,
+        )
+        try:
+            with client.stream("POST", "/idea/stream", json={"query": "x"}) as response:
+                events = self._read_sse_events(response)
+        finally:
+            app.dependency_overrides.clear()
+        types = [e["type"] for e in events]
+        assert types == ["step", "error"]
+        assert "LLM call failed" in events[1]["detail"]
+
+    @staticmethod
+    def _read_sse_events(response):
+        import json as _json
+        out = []
+        for raw in response.iter_lines():
+            if not raw or not raw.startswith("data: "):
+                continue
+            out.append(_json.loads(raw[6:]))
+        return out
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Route ordering invariant
+#
+# A StaticFiles mount at "/" registered mid-module shadows every API route
+# declared after it: the mount matches any path, and StaticFiles answers a
+# non-GET with {"detail": "Method Not Allowed"} — which is indistinguishable
+# from a real routing miss. POST /idea silently 405'd this way while /traverse
+# (declared earlier) kept working. Keep static mounts last and scoped.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestRouteOrdering:
+    def test_no_mount_shadows_a_later_api_route(self):
+        """A mount must not be able to swallow a route declared after it.
+
+        The SPA fallback is deliberately last and is the one exception: nothing
+        after it exists, so it cannot be shadowed.
+        """
+        from starlette.routing import Mount
+        from fastapi.routing import APIRoute
+
+        routes = app.routes
+        for i, m in enumerate(routes):
+            if not isinstance(m, Mount):
+                continue
+            prefix = m.path
+            for later in routes[i + 1:]:
+                if not isinstance(later, APIRoute):
+                    continue
+                if later.path == prefix or later.path.startswith(prefix.rstrip("/") + "/"):
+                    raise AssertionError(
+                        f"Mount {prefix!r} shadows APIRoute {later.path!r} "
+                        "declared after it — move the mount last or narrow its prefix"
+                    )
+
+    def test_static_mount_is_scoped_to_assets(self):
+        from starlette.routing import Mount
+
+        mounts = [r for r in app.routes if isinstance(r, Mount)]
+        for m in mounts:
+            assert m.path == "/assets", (
+                f"static mount must be scoped to /assets, got {m.path!r}; "
+                "a catch-all mount shadows API routes"
+            )
+
+    def test_idea_routes_reach_their_handlers_not_static(self, client, monkeypatch):
+        """POST /idea must not be answered with StaticFiles' 405."""
+        _patch_idea_dependencies(
+            path=[make_traversal_step()], monkeypatch=monkeypatch
+        )
+        try:
+            response = client.post("/idea", json={"query": "x"})
+        finally:
+            app.dependency_overrides.clear()
+        assert response.status_code != 405
+        assert response.status_code == 200
+
+    def test_all_api_routes_precede_the_spa_fallback(self):
+        """The catch-all GET must be the final route so API paths always win."""
+        paths = [getattr(r, "path", None) for r in app.routes]
+        if "/{path:path}" not in paths:
+            return
+        fallback_idx = paths.index("/{path:path}")
+        for r in app.routes[fallback_idx + 1:]:
+            if not isinstance(r, Mount):
+                raise AssertionError(
+                    f"route {getattr(r, 'path', r)!r} is declared after the SPA "
+                    "catch-all and will never match"
+                )

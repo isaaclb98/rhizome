@@ -38,12 +38,20 @@ def _config_env_names() -> set[str]:
 
 @pytest.fixture(autouse=True)
 def hermetic_env():
-    """Hide local `.env` values from config construction during tests."""
+    """Hide local `.env` values from config construction during tests.
+
+    RhizomeConfig reads the repo `.env` directly via pydantic-settings'
+    ``env_file``, so clearing ``os.environ`` is not enough — the fixture also
+    points ``env_file`` at a nonexistent path for the duration of the test.
+    """
     saved = dict(os.environ)
+    saved_env_file = RhizomeConfig.model_config.get("env_file")
     try:
         for name in _config_env_names():
             os.environ.pop(name, None)
+        RhizomeConfig.model_config["env_file"] = "/nonexistent/.env"
         yield
     finally:
         os.environ.clear()
         os.environ.update(saved)
+        RhizomeConfig.model_config["env_file"] = saved_env_file

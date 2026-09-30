@@ -6,6 +6,7 @@ import pytest
 from click.testing import CliRunner
 
 from rhizome.cli.commands.idea import (
+    PROMPT,
     build_prompt,
     format_fragments,
     material_path,
@@ -268,14 +269,83 @@ class TestPromptBuilding:
         assert "https://en.wikipedia.org/wiki/Henri_Bergson" in out
 
     def test_prompt_contains_seed_and_text(self):
-        prompt = build_prompt("structure and event", [make_step(text="the fragment body")])
+        prompt = build_prompt("structure and event", [make_step(text="the fragment body")], inject_seed=True)
         assert "structure and event" in prompt
         assert "the fragment body" in prompt
-        assert "one thesis" in prompt
+        # The prompt asks for a JSON object with two fields.
+        assert "main_thesis" in prompt
+        assert '"content"' in prompt
+
+    def test_prompt_omits_seed_by_default(self):
+        """The seed never reaches the model unless the caller opts in.
+
+        Naming the seed up front hands the model the intended thesis before it
+        reads a fragment, which defeats the collisions the walk exists to
+        produce.
+        """
+        prompt = build_prompt("structure and event", [make_step(text="the fragment body")])
+        assert "structure and event" not in prompt
+        assert "Seed:" not in prompt
+        assert "the fragment body" in prompt
+
+    def test_prompt_does_not_reference_a_withheld_seed(self):
+        """No dangling mention of a seed the model was never given."""
+        prompt = build_prompt("structure and event", [make_step()])
+        assert "to the seed" not in prompt
+        assert "some will be unrelated to each other" in prompt
+
+    def test_prompt_references_seed_only_when_injected(self):
+        prompt = build_prompt("seed", [make_step()], inject_seed=True)
+        assert "unrelated to each other and to the seed" in prompt
 
     def test_prompt_instructs_against_listing(self):
         prompt = build_prompt("seed", [make_step()])
         assert "Do not list ideas" in prompt
+
+    def test_prompt_forbids_first_person_and_hedging(self):
+        prompt = build_prompt("seed", [make_step()])
+        assert "Never use first person" in prompt
+        assert "I assume" in prompt  # named as a banned construction
+        assert "assert" in prompt
+
+    def test_prompt_does_not_invite_reflective_style(self):
+        """The prompt must not ask the model to narrate its own reasoning.
+
+        An earlier revision told the model to "say which you are doing" when
+        supplying connective tissue — which directly invites the first-person
+        reflective voice the thesis is required to avoid.
+        """
+        prompt = build_prompt("seed", [make_step()])
+        assert "say which you are doing" not in prompt
+
+    def test_prompt_is_domain_neutral(self):
+        """No corpus-specific or discipline-specific assumptions in the prompt.
+
+        The prompt must work against any embedded document collection, so it
+        cannot name a source (Wikipedia) or imply a field (philosophy, the
+        humanities). Material provenance is the ingest stage's business.
+
+        Scans the template rather than a rendered prompt: fragments are corpus
+        data supplied by the caller, and a Wikipedia corpus legitimately puts
+        Wikipedia URLs in them.
+        """
+        template = PROMPT.lower()
+        for banned in (
+            "wikipedia",
+            "encyclopedia",
+            "philosoph",
+            "modernism",
+            "postmodern",
+            "critical theory",
+            "humanities",
+            "scholar",
+            "academic",
+        ):
+            assert banned not in template, f"prompt assumes domain via {banned!r}"
+
+    def test_prompt_does_not_presume_a_discipline(self):
+        assert "any domain" in PROMPT
+        assert "Do not assume a discipline" in PROMPT
 
 
 class _StubConfig:
@@ -318,10 +388,10 @@ def stubbed(monkeypatch):
             captured["llm_model"] = model
             captured["llm_base_url"] = base_url
 
-        def complete(self, messages, temperature=None, max_tokens=8192):
+        def complete(self, messages, temperature=None, max_tokens=8192, **kwargs):
             captured["prompt"] = messages[0]["content"]
             captured["llm_temperature"] = temperature
-            return "The thesis text."
+            return '{"main_thesis": "The thesis.", "content": "The thesis text."}'
 
     monkeypatch.setattr("rhizome.cli.commands.idea.GatewayLLM", StubLLM)
     monkeypatch.setattr(
@@ -396,6 +466,26 @@ class TestIdeaCommand:
         assert content.startswith("# seed")
         assert "The thesis text." in content
         assert result.stdout == ""
+
+    def test_seed_reaches_prompt_only_when_flag_set(self, stubbed):
+        CliRunner().invoke(main, ["idea", "structure and event"])
+        assert "structure and event" not in stubbed["prompt"]
+        assert "Seed:" not in stubbed["prompt"]
+
+        CliRunner().invoke(main, ["idea", "structure and event", "--inject-seed", "true"])
+        assert "Seed: structure and event" in stubbed["prompt"]
+
+    def test_inject_seed_accepts_false(self, stubbed):
+        CliRunner().invoke(main, ["idea", "seed", "--inject-seed", "false"])
+        assert "Seed:" not in stubbed["prompt"]
+
+    def test_inject_seed_requires_a_value(self, stubbed):
+        result = CliRunner().invoke(main, ["idea", "seed", "--inject-seed"])
+        assert result.exit_code != 0
+        assert "requires an argument" in result.output
+
+    def test_help_lists_inject_seed(self):
+        assert "--inject-seed" in CliRunner().invoke(main, ["idea", "--help"]).output
 
     def test_knob_overrides_reach_engine(self, stubbed):
         CliRunner().invoke(

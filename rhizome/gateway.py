@@ -11,10 +11,16 @@ Reasoning models need two accommodations, both learned from real runs:
 - they can spend an entire token budget reasoning and return nothing, which
   surfaces as finish_reason == "length" and must be retried with more room
   rather than treated as an empty reply
+
+Structured output (``response_format={"type": "json_object"}``) is supported
+on the gateways we use; the runtime coerces Claude via its tool-use path and
+OpenAI via JSON mode. The gateway itself stays format-agnostic — callers opt
+in by passing ``response_format`` and parse the result.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 
@@ -50,6 +56,67 @@ def strip_thinking(text: str | None) -> str:
     if cleaned == text:
         cleaned = re.sub(r"<think>.*", "", text, flags=re.DOTALL)
     return cleaned
+
+
+# JSON-mode reply schema for synthesis outputs. Kept here so the parser and
+# the prompt (which mirrors this shape to the model) cannot drift apart.
+THESIS_JSON_FIELDS = ("main_thesis", "content")
+
+
+def parse_thesis_json(text: str | None) -> dict:
+    """Parse a JSON-mode synthesis reply into the canonical thesis dict.
+
+    The model is asked for ``{"main_thesis": str, "content": str}`` and is
+    expected to honor that schema in response_format=json_object mode. In
+    practice it sometimes slips: it wraps the JSON in a code fence, leaves
+    trailing prose after the closing brace, omits a field, or hands back the
+    schema but with ``content`` empty. This helper tolerates those shapes
+    without raising, so a sloppy reply still produces a run.
+
+    Args:
+        text: Raw reply from the gateway, with reasoning blocks already
+            stripped.
+
+    Returns:
+        A dict with both ``main_thesis`` and ``content`` keys. Empty string
+        for any field the model omitted. If the reply cannot be located as
+        JSON at all, the entire stripped text is returned as ``content`` and
+        ``main_thesis`` is empty — better than losing the run.
+    """
+    out: dict = {"main_thesis": "", "content": ""}
+    if not text:
+        return out
+
+    candidate = text.strip()
+
+    # Strip a single wrapping ```json ... ``` fence if present.
+    fence = re.search(r"```(?:json)?\s*(.*?)```", candidate, re.DOTALL)
+    if fence:
+        candidate = fence.group(1).strip()
+
+    # Find the outermost JSON object even if there is trailing prose.
+    start = candidate.find("{")
+    end = candidate.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        candidate = candidate[start:end + 1]
+
+    parsed: object = None
+    try:
+        parsed = json.loads(candidate)
+    except (ValueError, TypeError):
+        parsed = None
+
+    if isinstance(parsed, dict):
+        for key in THESIS_JSON_FIELDS:
+            value = parsed.get(key)
+            if isinstance(value, str):
+                out[key] = value
+    else:
+        # Reply was not JSON. Treat the whole thing as content so the run
+        # still produces something; main_thesis stays empty.
+        out["content"] = text.strip()
+
+    return out
 
 
 class GatewayLLM:
@@ -97,6 +164,7 @@ class GatewayLLM:
         temperature: float = 0.9,
         max_tokens: int = 8192,
         retries: int = 2,
+        response_format: dict | None = None,
     ) -> str:
         """Return the assistant's reply, retrying with more room if truncated.
 
@@ -105,6 +173,10 @@ class GatewayLLM:
             temperature: Sampling temperature.
             max_tokens: Initial output token budget.
             retries: Retries allowed when the reply is truncated.
+            response_format: Optional ``{"type": "json_object"}`` (or similar)
+                passed straight through to the gateway. When set, the reply
+                comes back as a JSON string the caller parses; this method
+                does not enforce schema or parse for you.
 
         Returns:
             Assistant reply text with reasoning blocks stripped.
@@ -114,14 +186,15 @@ class GatewayLLM:
         """
         budget = max_tokens
         for _attempt in range(retries + 1):
-            data = self._post(
-                {
-                    "model": self.model,
-                    "messages": messages,
-                    "temperature": temperature,
-                    "max_tokens": budget,
-                }
-            )
+            payload = {
+                "model": self.model,
+                "messages": messages,
+                "temperature": temperature,
+                "max_tokens": budget,
+            }
+            if response_format is not None:
+                payload["response_format"] = response_format
+            data = self._post(payload)
             try:
                 choice = data["choices"][0]
                 content = strip_thinking(choice["message"]["content"])
