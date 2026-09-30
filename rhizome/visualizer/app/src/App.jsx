@@ -19,6 +19,7 @@ const DEFAULT_PARAMS = {
   top_k: 30,
   temperature: 1.0,
   max_same_article_consecutive: 2,
+  inject_seed: false,
 };
 
 const THEME_STORAGE_KEY = 'rhizome-theme';

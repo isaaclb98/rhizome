@@ -16,6 +16,7 @@ export default function SynthesizeTab({ params, setParams }) {
     epsilon: params.epsilon,
     temperature: params.temperature,
     max_same_article_consecutive: params.max_same_article_consecutive,
+    inject_seed: params.inject_seed,
   });
 
   const updateParam = (key, value) => {
@@ -199,6 +200,21 @@ export default function SynthesizeTab({ params, setParams }) {
               disabled={isLoading}
             />
           </div>
+
+          <label
+            className="inline-flex items-center gap-2 pb-2.5 text-sm text-text-secondary cursor-pointer select-none"
+            title="When on, the seed text is included in the LLM prompt as a synthesis lens. Off: the model only sees the fragments."
+          >
+            <input
+              type="checkbox"
+              checked={localParams.inject_seed}
+              onChange={(e) => updateParam('inject_seed', e.target.checked)}
+              disabled={isLoading}
+              className="h-4 w-4 rounded border-border bg-bg-secondary text-accent focus:ring-2 focus:ring-accent cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            />
+            Include seed in prompt
+          </label>
+
           <button
             type="submit"
             disabled={isLoading || !localParams.query.trim()}
