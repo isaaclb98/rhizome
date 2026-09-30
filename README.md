@@ -266,7 +266,7 @@ HF_API_TOKEN=                  # for HuggingFace Inference API
 HF_MODEL=sentence-transformers/all-MiniLM-L6-v2
 QDRANT_API_KEY=                # for Qdrant Cloud
 WIKIPEDIA_DOMAINS=Modernism,Postmodernism,Critical theory
-DEFAULT_DEPTH=8
+DEFAULT_DEPTH=10
 EPSILON=0.1
 TOP_K=5
 ```

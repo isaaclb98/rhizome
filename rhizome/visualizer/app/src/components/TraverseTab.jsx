@@ -15,7 +15,7 @@ const EXAMPLE_QUERIES = [
 
 const DEFAULT_PARAMS = {
   query: EXAMPLE_QUERIES[Math.floor(Math.random() * EXAMPLE_QUERIES.length)],
-  depth: 20,
+  depth: 10,
   epsilon: 0.1,
   top_k: 30,
   temperature: 1.0,

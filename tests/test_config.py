@@ -19,7 +19,7 @@ class TestRhizomeConfig:
         )
         assert cfg.qdrant_url == "http://localhost:6333"
         assert cfg.qdrant_collection == "test-collection"
-        assert cfg.default_depth == 8
+        assert cfg.default_depth == 10
         assert cfg.epsilon == 0.1
 
     def test_embedder_type_normalized(self):
