@@ -6,6 +6,7 @@ import pytest
 from click.testing import CliRunner
 
 from rhizome.cli.commands.idea import (
+    PROMPT,
     build_prompt,
     format_fragments,
     material_path,
@@ -292,6 +293,35 @@ class TestPromptBuilding:
         """
         prompt = build_prompt("seed", [make_step()])
         assert "say which you are doing" not in prompt
+
+    def test_prompt_is_domain_neutral(self):
+        """No corpus-specific or discipline-specific assumptions in the prompt.
+
+        The prompt must work against any embedded document collection, so it
+        cannot name a source (Wikipedia) or imply a field (philosophy, the
+        humanities). Material provenance is the ingest stage's business.
+
+        Scans the template rather than a rendered prompt: fragments are corpus
+        data supplied by the caller, and a Wikipedia corpus legitimately puts
+        Wikipedia URLs in them.
+        """
+        template = PROMPT.lower()
+        for banned in (
+            "wikipedia",
+            "encyclopedia",
+            "philosoph",
+            "modernism",
+            "postmodern",
+            "critical theory",
+            "humanities",
+            "scholar",
+            "academic",
+        ):
+            assert banned not in template, f"prompt assumes domain via {banned!r}"
+
+    def test_prompt_does_not_presume_a_discipline(self):
+        assert "any domain" in PROMPT
+        assert "Do not assume a discipline" in PROMPT
 
 
 class _StubConfig:
