@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import Controls from './Controls.jsx';
 import Graph from './Graph.jsx';
 import PathPanel from './PathPanel.jsx';
+import HowItWorks from './HowItWorks.jsx';
 
 const EXAMPLE_QUERIES = [
   'the tension between modernism and postmodernism',
@@ -179,6 +180,7 @@ export default function TraverseTab({ params, setParams }) {
           </header>
           <Controls params={params} onTraverse={handleStreamTraverse} isLoading={isLoading} />
         </section>
+        <HowItWorks mode="traverse" />
       </div>
 
       {/* Error banner */}

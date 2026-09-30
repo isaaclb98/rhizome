@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import Markdown from 'react-markdown';
+import HowItWorks from './HowItWorks.jsx';
 
 export default function SynthesizeTab({ params, setParams }) {
   const [thesis, setThesis] = useState({ main_thesis: '', content: '' });
@@ -240,6 +241,7 @@ export default function SynthesizeTab({ params, setParams }) {
             </div>
           </form>
         </section>
+        <HowItWorks mode="synthesize" />
       </div>
 
       {/* Error banner */}
