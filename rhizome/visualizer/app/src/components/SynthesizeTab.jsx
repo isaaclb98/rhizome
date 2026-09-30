@@ -260,7 +260,7 @@ export default function SynthesizeTab({ params, setParams }) {
             </div>
           ) : (
             <div className="text-text-muted text-sm">
-              Run a synthesis to begin.
+              Type a seed and hit Synthesize — the walk reads through the corpus, collects fragments, and the LLM forges a thesis from them.
             </div>
           )}
         </div>

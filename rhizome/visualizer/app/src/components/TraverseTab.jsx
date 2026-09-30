@@ -210,9 +210,9 @@ export default function TraverseTab({ params, setParams }) {
             />
           ) : (
             <div className="relative flex-1">
-              <div className="absolute inset-0 flex flex-col items-center justify-center text-text-muted text-xs text-center gap-2">
-                <span>Graph appears here</span>
-                <span>after traversal</span>
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-text-muted text-xs text-center gap-2 px-6">
+                <span>Graph of the walk's path</span>
+                <span>appears here after traversal</span>
               </div>
             </div>
           )}
