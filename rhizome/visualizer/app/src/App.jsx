@@ -61,9 +61,15 @@ function ThemeButton({ theme, onToggle }) {
 }
 
 export default function App() {
-  const [tab, setTab] = useState('synthesize');
   const [params, setParams] = useState(DEFAULT_PARAMS);
   const [theme, setTheme] = useState(readInitialTheme);
+
+  // Initial tab can come from ?tab=synthesize|traverse — useful for headless
+  // tests and deep links. Falls back to synthesize.
+  const [tab, setTab] = useState(() => {
+    const fromUrl = new URLSearchParams(window.location.search).get('tab');
+    return fromUrl === 'traverse' ? 'traverse' : 'synthesize';
+  });
 
   // Apply theme to <html data-theme> whenever it changes. Single source of
   // truth so tab switches don't reset it and a stale localStorage value

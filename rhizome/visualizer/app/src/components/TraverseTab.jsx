@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import Controls from './Controls.jsx';
 import Graph from './Graph.jsx';
 import PathPanel from './PathPanel.jsx';
