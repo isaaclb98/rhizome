@@ -7,7 +7,9 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/traverse': 'http://localhost:8000',
+      '/idea': 'http://localhost:8000',
       '/health': 'http://localhost:8000',
+      '/config': 'http://localhost:8000',
     },
   },
   build: {
