@@ -36,7 +36,7 @@ function ThemeButton({ theme, onToggle }) {
     <button
       type="button"
       onClick={onToggle}
-      className="ml-auto px-3 py-2 text-sm text-text-muted hover:text-text-primary border border-border rounded transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      className="w-full flex items-center gap-3 px-3 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-bg-tertiary rounded-md transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       title={`Switch to ${next} mode`}
       aria-label="Toggle theme"
     >
@@ -88,31 +88,36 @@ export default function App() {
   }, []);
 
   return (
-    <div className="flex flex-col h-screen bg-bg-primary overflow-hidden">
-      <header className="flex-none bg-bg-secondary border-b border-border px-4 py-3">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight text-text-primary">
-              Rhizome
-            </h1>
-            <span className="text-xs text-text-muted">
-              Wikipedia semantic traversal
-            </span>
-          </div>
-          <ThemeButton theme={theme} onToggle={toggleTheme} />
+    <div className="flex h-screen bg-bg-primary overflow-hidden">
+      {/* Left sidebar — mode switcher */}
+      <aside className="flex-none w-56 bg-bg-secondary border-r border-border flex flex-col">
+        <div className="px-4 py-4 border-b border-border">
+          <h1 className="text-xl font-bold tracking-tight text-text-primary">
+            Rhizome
+          </h1>
+          <span className="text-xs text-text-muted">
+            Wikipedia semantic traversal
+          </span>
         </div>
-        <nav className="flex gap-1" role="tablist">
+
+        <nav className="flex-1 px-2 py-3 space-y-1" role="tablist" aria-label="Sections">
           <button
             type="button"
             role="tab"
             aria-selected={tab === 'synthesize'}
             onClick={() => setTab('synthesize')}
-            className={`px-4 py-2 text-sm rounded-t border border-b-0 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+            className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-md transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
               tab === 'synthesize'
-                ? 'bg-bg-primary border-border text-text-primary'
-                : 'bg-transparent border-transparent text-text-muted hover:text-text-primary'
+                ? 'bg-bg-tertiary text-text-primary font-medium'
+                : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
             }`}
           >
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 19l7-7 3 3-7 7-3-3z"/>
+              <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
+              <path d="M2 2l7.586 7.586"/>
+              <circle cx="11" cy="11" r="2"/>
+            </svg>
             Synthesize
           </button>
           <button
@@ -120,24 +125,39 @@ export default function App() {
             role="tab"
             aria-selected={tab === 'traverse'}
             onClick={() => setTab('traverse')}
-            className={`px-4 py-2 text-sm rounded-t border border-b-0 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+            className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-md transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
               tab === 'traverse'
-                ? 'bg-bg-primary border-border text-text-primary'
-                : 'bg-transparent border-transparent text-text-muted hover:text-text-primary'
+                ? 'bg-bg-tertiary text-text-primary font-medium'
+                : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
             }`}
           >
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="6" cy="6" r="3"/>
+              <circle cx="18" cy="6" r="3"/>
+              <circle cx="12" cy="18" r="3"/>
+              <line x1="8.5" y1="7.5" x2="10.5" y2="15.5"/>
+              <line x1="15.5" y1="7.5" x2="13.5" y2="15.5"/>
+              <line x1="6" y1="6" x2="18" y2="6"/>
+            </svg>
             Traverse
           </button>
         </nav>
-      </header>
 
-      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-        {tab === 'synthesize' ? (
-          <SynthesizeTab params={params} setParams={setParams} />
-        ) : (
-          <TraverseTab params={params} setParams={setParams} />
-        )}
-      </div>
+        <div className="px-2 py-3 border-t border-border">
+          <ThemeButton theme={theme} onToggle={toggleTheme} />
+        </div>
+      </aside>
+
+      {/* Main content area */}
+      <main className="flex-1 min-w-0 flex flex-col overflow-hidden">
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+          {tab === 'synthesize' ? (
+            <SynthesizeTab params={params} setParams={setParams} />
+          ) : (
+            <TraverseTab params={params} setParams={setParams} />
+          )}
+        </div>
+      </main>
     </div>
   );
 }

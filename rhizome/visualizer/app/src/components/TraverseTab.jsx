@@ -166,18 +166,6 @@ export default function TraverseTab({ params, setParams }) {
 
   return (
     <>
-      {/* Header (preserves original App.jsx structure exactly) */}
-      <header className="flex-none bg-bg-secondary border-b border-border px-4 py-3">
-        <div className="flex items-baseline gap-3 mb-1">
-          <h2 className="text-lg font-semibold tracking-tight text-text-primary">
-            Traverse
-          </h2>
-          <span className="text-xs text-text-muted">
-            Walk the corpus step by step
-          </span>
-        </div>
-      </header>
-
       {/* Carded form */}
       <div className="flex-none px-4 pt-4">
         <section className="bg-bg-secondary border border-border rounded-lg p-4">
