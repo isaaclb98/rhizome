@@ -57,7 +57,9 @@ export default function PathPanel({ path, selectedChunkId, onSelectChunk }) {
   if (path.length === 0) {
     return (
       <aside className="h-full border-r border-border flex items-center justify-center bg-bg-primary">
-        <span className="text-text-muted text-sm text-center px-6">Run a traversal to see the path</span>
+        <span className="text-text-muted text-sm text-center px-6 max-w-xs">
+          Type a query and hit Traverse — each step reads as a new chunk of Wikipedia, in order, with similarity scores.
+        </span>
       </aside>
     );
   }
