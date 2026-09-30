@@ -253,28 +253,30 @@ export default function SynthesizeTab({ params, setParams }) {
 
       {/* Main: thesis + walk material */}
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-        {/* Thesis panel */}
+        {/* Thesis panel — centered readable column */}
         <div className="flex-1 min-h-0 overflow-y-auto px-6 py-6 bg-bg-primary">
           {thesis.content ? (
-            <article className="markdown-body max-w-none text-text-primary">
-              {thesis.main_thesis ? (
-                <header className="mb-6 pb-5 border-b border-border">
-                  <div className="text-xs uppercase tracking-wider text-text-muted mb-2">
-                    Thesis
-                  </div>
-                  <p className="text-lg font-semibold leading-snug text-text-primary">
-                    {thesis.main_thesis}
-                  </p>
-                </header>
-              ) : null}
-              <Markdown>{thesis.content}</Markdown>
-            </article>
+            <div className="max-w-2xl mx-auto">
+              <article className="markdown-body text-text-primary">
+                {thesis.main_thesis ? (
+                  <header className="mb-6 pb-5 border-b border-border">
+                    <div className="text-[11px] uppercase tracking-[0.18em] text-text-muted mb-3 font-medium">
+                      Thesis
+                    </div>
+                    <p className="text-2xl font-semibold leading-snug text-text-primary tracking-tight">
+                      {thesis.main_thesis}
+                    </p>
+                  </header>
+                ) : null}
+                <Markdown>{thesis.content}</Markdown>
+              </article>
+            </div>
           ) : isLoading ? (
-            <div className="text-text-muted text-sm">
+            <div className="max-w-2xl mx-auto text-text-muted text-sm">
               Synthesizing…
             </div>
           ) : (
-            <div className="text-text-muted text-sm">
+            <div className="max-w-2xl mx-auto text-text-muted text-sm">
               Type a seed and hit Synthesize — the walk reads through the corpus, collects fragments, and the LLM forges a thesis from them.
             </div>
           )}
@@ -291,26 +293,34 @@ export default function SynthesizeTab({ params, setParams }) {
                 </span>
               ) : null}
             </summary>
-            <ol className="max-h-64 overflow-y-auto px-4 py-2 space-y-2">
-              {path.map((step, idx) => (
-                <li key={step.chunk_id || idx} className="text-xs">
-                  <div className="flex items-center gap-2 text-text-muted">
-                    <span>[{idx}]</span>
+            <ol className="max-h-64 overflow-y-auto px-4 py-2 space-y-1.5">
+              {path.map((step, idx) => {
+                const sim = typeof step.similarity === 'number' ? step.similarity : 0;
+                const widthPct = Math.max(0, Math.min(100, Math.round(sim * 100)));
+                return (
+                  <li key={step.chunk_id || idx} className="text-xs flex items-center gap-3">
+                    <span className="text-text-muted font-mono w-6 text-right">{String(idx).padStart(2, '0')}</span>
                     <a
                       href={step.article_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-accent hover:underline"
+                      className="text-text-secondary hover:text-accent truncate flex-1"
                     >
                       {step.article_title}
                     </a>
                     {step.forced_jump && (
                       <span className="text-amber-400" title="Forced jump — unrelated to the preceding fragment">↯</span>
                     )}
-                    <span className="text-text-muted">sim {step.similarity?.toFixed?.(3) ?? '–'}</span>
-                  </div>
-                </li>
-              ))}
+                    <div className="w-16 h-1.5 bg-bg-tertiary rounded-full overflow-hidden flex-none">
+                      <div
+                        className="h-full bg-accent"
+                        style={{ width: `${widthPct}%` }}
+                      />
+                    </div>
+                    <span className="text-text-muted font-mono w-10 text-right">{sim.toFixed(3)}</span>
+                  </li>
+                );
+              })}
             </ol>
           </details>
         )}
