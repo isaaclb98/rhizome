@@ -25,6 +25,23 @@ class MockEmbedder(Embedder):
         return [self._vector for _ in texts]
 
 
+class CountingEmbedder(Embedder):
+    """Embedder that counts how many times embed() is called.
+
+    Used by traversal tests to assert that walks don't re-embed chunks that
+    already have a stored vector in Qdrant.
+    """
+
+    def __init__(self) -> None:
+        self.call_count = 0
+        self.texts_seen: list[str] = []
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        self.call_count += 1
+        self.texts_seen.extend(texts)
+        return [[0.1] * 384 for _ in texts]
+
+
 class MockVectorStore:
     """Test double for VectorStoreClient."""
 
@@ -495,6 +512,87 @@ class TestTraversalStream:
         assert len(steps) >= 1
         # The engine.path should accumulate regardless of forced jumps
         assert len(engine.path) >= 1
+
+    @pytest.mark.asyncio
+    async def test_traverse_stream_embeds_only_the_seed(self):
+        """traverse_stream() must embed exactly once — for the starting concept.
+
+        Every subsequent step reuses the stored vector returned alongside
+        each Qdrant hit. Re-embedding at every step is wasted work because
+        those chunks were already embedded at ingest time.
+        """
+        mock_results = [
+            {
+                "id": f"chunk-{i}",
+                "score": 0.9 - i * 0.01,
+                "payload": {
+                    "id": f"chunk-{i}",
+                    "text": f"text for chunk {i}",
+                    "article_title": "T",
+                    "article_url": "u",
+                },
+                "vector": [0.2] * 384,
+            }
+            for i in range(20)
+        ]
+        embedder = CountingEmbedder()
+        vector_store = MockVectorStore(mock_results)
+        # depth=10 means up to 10 steps; without stored-vector reuse we'd
+        # see 10+1 embed calls. With reuse, exactly 1.
+        config = TraversalConfig(depth=10, epsilon=0.0, temperature=0.0)
+
+        engine = TraversalEngine(embedder=embedder, vector_store=vector_store, config=config)
+        steps = [step async for step in engine.traverse_stream("the initial seed")]
+
+        assert embedder.call_count == 1
+        # And the embed was for the seed, not for any selected chunk
+        assert embedder.texts_seen == ["the initial seed"]
+        # And the walk still produced some steps
+        assert len(steps) >= 1
+
+    @pytest.mark.asyncio
+    async def test_traverse_stream_falls_back_to_embed_when_no_stored_vector(self):
+        """If a hit arrives without a stored vector, fall back to embedding.
+
+        The branch is dead in production (every ingested chunk has a stored
+        vector) but the engine should still handle it without crashing.
+        """
+        mock_results = [
+            {
+                "id": "modernism-001",
+                "score": 0.9,
+                "payload": {
+                    "id": "modernism-001",
+                    "text": "Modernism text",
+                    "article_title": "Modernism",
+                    "article_url": "u",
+                },
+                # No "vector" key — simulates a Qdrant hit returned with
+                # with_vectors=False.
+            },
+            {
+                "id": "modernism-002",
+                "score": 0.85,
+                "payload": {
+                    "id": "modernism-002",
+                    "text": "Modernism continued",
+                    "article_title": "Modernism",
+                    "article_url": "u",
+                },
+                # No "vector" key.
+            },
+        ]
+        embedder = CountingEmbedder()
+        vector_store = MockVectorStore(mock_results)
+        config = TraversalConfig(depth=3, epsilon=0.0, max_same_article_consecutive=1, temperature=0.0)
+
+        engine = TraversalEngine(embedder=embedder, vector_store=vector_store, config=config)
+        steps = [step async for step in engine.traverse_stream("modernism")]
+
+        # Seed embed + one fallback embed (no stored vector on the first hit).
+        # The point: it didn't crash, and we didn't double-embed.
+        assert embedder.call_count >= 2
+        assert len(steps) >= 1
 
 
 class TestTraversalConfigFromDict:

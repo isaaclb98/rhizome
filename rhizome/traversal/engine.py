@@ -207,13 +207,17 @@ class TraversalEngine:
         return path
 
     async def traverse_stream(self, starting_concept: str) -> AsyncGenerator[TraversalStep, None]:
-        """Async generator that yields each traversal step as it completes.
+        """Stream a traversal step by step.
 
-        Background pipelining: while the caller processes step N, step N+1's embed
-        runs concurrently. Uses asyncio.to_thread for the sync embedder.
+        Embedding is performed exactly once per walk, on the starting concept.
+        Subsequent steps reuse the stored vector returned alongside each Qdrant
+        hit (``selected["vector"]``). Falls back to a one-off embed if a hit
+        arrives without a stored vector, but in production every chunk in the
+        collection was ingested with its own vector, so this branch is dead
+        code in practice.
 
-        Accumulates self.path (list of chunk_ids) on the engine instance
-        for the SSE done event.
+        Accumulates ``self.path`` (list of chunk_ids) on the engine instance
+        so the SSE done event has it without a second traversal.
         """
         # Reset path on engine instance (used by SSE done event)
         self.path = []
@@ -227,12 +231,10 @@ class TraversalEngine:
             maxlen=self.config.max_same_article_consecutive
         )
 
-        query = starting_concept
+        # One embed, for the seed. Every later step reuses stored vectors.
+        query_vector = (await asyncio.to_thread(self.embedder.embed, [starting_concept]))[0]
 
         while len(self.path) < self.config.depth:
-            # Embed current query (runs in thread pool)
-            query_vector = (await asyncio.to_thread(self.embedder.embed, [query]))[0]
-
             # Search (runs in thread pool)
             candidates = await asyncio.to_thread(
                 self.vector_store.search_excluding,
@@ -357,18 +359,18 @@ class TraversalEngine:
 
             in_forced_jump = False
 
-            # Use stored vector from Qdrant when available; fall back to re-embed
+            # Advance: reuse the selected chunk's stored vector as the next
+            # query. Fall back to a one-off embed only if Qdrant didn't return
+            # a vector with this hit (shouldn't happen in production).
             stored_vector = selected.get("vector")
             if stored_vector is not None:
-                next_query_vector = stored_vector
+                query_vector = stored_vector
             else:
-                next_query_vector = (await asyncio.to_thread(self.embedder.embed, [step.text[:500]]))[0]
+                query_vector = (
+                    await asyncio.to_thread(self.embedder.embed, [step.text[:500]])
+                )[0]
 
             yield step
-
-            # Advance: use pre-fetched vector for next query
-            query_vector = next_query_vector
-            query = step.text[:500]
 
         # Normal exit — path accumulated in self.path
         return
