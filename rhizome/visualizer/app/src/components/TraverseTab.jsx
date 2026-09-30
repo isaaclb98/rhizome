@@ -35,16 +35,6 @@ export default function TraverseTab({ params, setParams }) {
   // Theme lives in App.jsx — read it once on mount for any data-* attributes
   // that depend on the current value, but do not own the state here.
 
-  const [categories, setCategories] = useState('');
-
-  // Fetch server config (categories) on mount
-  useEffect(() => {
-    fetch('/config')
-      .then((r) => r.json())
-      .then((data) => setCategories(data.categories || ''))
-      .catch(() => console.warn('Failed to fetch /config'));
-  }, []);
-
   const handleStreamTraverse = useCallback(async (requestParams) => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -187,11 +177,6 @@ export default function TraverseTab({ params, setParams }) {
               Walk the corpus step by step
             </span>
           </div>
-          {((categories || stats?.categories)?.trim()) && (
-            <span className="text-[10px] text-text-muted font-mono mt-1">
-              {(stats?.categories || categories).split(',').join(' · ')}
-            </span>
-          )}
         </div>
         <Controls params={params} onTraverse={handleStreamTraverse} isLoading={isLoading} />
       </header>
