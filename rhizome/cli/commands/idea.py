@@ -19,7 +19,7 @@ The material may come from any domain. Do not assume a discipline, a period, or 
 
 Write one thesis: a single argument with a real claim, built by synthesizing this material. Use the fragments as evidence and as raw material. Where you need connective tissue the fragments do not supply — context, framing, a concept you know — supply it from your own knowledge, woven in as established fact.
 
-Do not summarize the fragments in order. Do not list ideas. Do not comment on the traversal. Argue one thing, and let the collisions in the material carry it. Cite the sources you actually used, by the titles given.
+Do not summarize the fragments in order. Do not list ideas. Do not comment on the traversal. Argue one thing, and let the collisions in the material carry it.
 
 Voice: assert. Never use first person — no "I", "we", "my", "us", in any form, including inside quotations of your own reasoning. Never hedge or narrate your process: no "I assume", "I read this as", "it seems", "one might argue", "arguably", "I take X to mean". State every claim as fact and commit to it. If the material is thin, say so as a property of the material, not as a confession about your uncertainty.
 {seed_block}
