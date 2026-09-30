@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import Markdown from 'react-markdown';
 
 export default function SynthesizeTab({ params, setParams }) {
-  const [thesis, setThesis] = useState('');
+  const [thesis, setThesis] = useState({ main_thesis: '', content: '' });
   const [path, setPath] = useState([]);
   const [stats, setStats] = useState(null);
   const [walkProgress, setWalkProgress] = useState(null);
@@ -31,7 +31,7 @@ export default function SynthesizeTab({ params, setParams }) {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
-    setThesis('');
+    setThesis({ main_thesis: '', content: '' });
     setPath([]);
     setStats(null);
     setWalkProgress({ walked: 0, total: localParams.depth });
@@ -95,7 +95,10 @@ export default function SynthesizeTab({ params, setParams }) {
               prev ? { ...prev, walked: prev.walked + 1 } : prev
             );
           } else if (data.type === 'thesis') {
-            setThesis(data.thesis || '');
+            setThesis({
+              main_thesis: data.main_thesis || '',
+              content: data.content || '',
+            });
           } else if (data.type === 'done') {
             setStats(data.stats || null);
           } else if (data.type === 'error') {
@@ -217,9 +220,19 @@ export default function SynthesizeTab({ params, setParams }) {
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
         {/* Thesis panel */}
         <div className="flex-1 min-h-0 overflow-y-auto px-6 py-6 bg-bg-primary">
-          {thesis ? (
+          {thesis.content ? (
             <article className="markdown-body max-w-none text-text-primary">
-              <Markdown>{thesis}</Markdown>
+              {thesis.main_thesis ? (
+                <header className="mb-6 pb-5 border-b border-border">
+                  <div className="text-xs uppercase tracking-wider text-text-muted mb-2">
+                    Thesis
+                  </div>
+                  <p className="text-lg font-semibold leading-snug text-text-primary">
+                    {thesis.main_thesis}
+                  </p>
+                </header>
+              ) : null}
+              <Markdown>{thesis.content}</Markdown>
             </article>
           ) : isLoading ? (
             <div className="text-text-muted text-sm">

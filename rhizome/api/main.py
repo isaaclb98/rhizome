@@ -186,7 +186,8 @@ class IdeaStatsResponse(BaseModel):
 class IdeaResponse(BaseModel):
     """POST /idea response body."""
 
-    thesis: str
+    main_thesis: str
+    content: str
     path: list[TraversalStepResponse]
     stats: IdeaStatsResponse
 
@@ -597,7 +598,8 @@ def idea(
 
     stats = compute_stats(path, traversal_config)
     return IdeaResponse(
-        thesis=thesis,
+        main_thesis=thesis.get("main_thesis", ""),
+        content=thesis.get("content", ""),
         path=_path_to_response(path),
         stats=IdeaStatsResponse(
             depth=stats["depth"],
@@ -685,7 +687,7 @@ async def idea_stream(
                 return
 
             stats = compute_stats(path_holder, traversal_config)
-            yield f"data: {json.dumps({'type':'thesis','thesis':thesis})}\n\n"
+            yield f"data: {json.dumps({'type':'thesis','main_thesis':thesis.get('main_thesis',''),'content':thesis.get('content','')})}\n\n"
             yield f"data: {json.dumps({'type':'done','stats':{**stats,'model':llm.model}})}\n\n"
         except asyncio.CancelledError:
             yield f"data: {json.dumps({'type':'cancelled'})}\n\n"

@@ -607,16 +607,44 @@ class TestTraverseStream:
 
 
 class FakeLLM:
-    """Drop-in for GatewayLLM.complete() used by /idea."""
+    """Drop-in for GatewayLLM.complete() used by /idea.
+
+    Returns the canonical JSON-mode envelope ``{"main_thesis": ..., "content": ...}``
+    so the parser gets the same shape it sees in production.
+    """
 
     def __init__(self, text: str = "A synthesized thesis.") -> None:
         self.model = "fake-model"
         self._text = text
         self.calls: list = []
 
-    def complete(self, messages, temperature):
+    def complete(self, messages, temperature, **kwargs):
         self.calls.append({"messages": messages, "temperature": temperature})
-        return self._text
+        return self._as_json()
+
+    def _as_json(self) -> str:
+        """Wrap the configured text in the production JSON envelope.
+
+        ``main_thesis`` is derived from the first sentence of ``_text`` so
+        tests that don't override the helper still exercise both fields; if
+        there is no sentence boundary, ``main_thesis`` is empty and the
+        parser returns the whole string as ``content``.
+        """
+        import json as _json
+        body = self._text.strip()
+        # Find the first sentence terminator (. ! ?) followed by whitespace
+        # or end-of-string. "A synthesized thesis." has none, so main_thesis
+        # stays empty and the whole string lands in content (matches what
+        # parse_thesis_json would produce from a sloppy non-JSON reply).
+        import re as _re
+        m = _re.search(r"[.!?](?:\s|$)", body)
+        if m and m.start() < 200:
+            main = body[: m.end()].rstrip()
+            rest = body[m.end():].lstrip()
+        else:
+            main = ""
+            rest = body
+        return _json.dumps({"main_thesis": main, "content": rest})
 
 
 def _patch_idea_dependencies(
@@ -642,7 +670,7 @@ def _patch_idea_dependencies(
     fake_engine = FakeTraversalEngine(path=path, traverse_raises=traverse_raises)
     fake_llm = FakeLLM(text=llm_text)
     if llm_raises is not None:
-        fake_llm.complete = lambda messages, temperature: (_ for _ in ()).throw(llm_raises)
+        fake_llm.complete = lambda messages, temperature, **kwargs: (_ for _ in ()).throw(llm_raises)
 
     if monkeypatch is not None:
         monkeypatch.setattr(
@@ -656,7 +684,7 @@ def _patch_idea_dependencies(
             )
         monkeypatch.setattr(
             "rhizome.api.main._resolve_llm",
-            lambda config, override_model=None: _apply_model_override(fake_llm, override_model),
+            lambda config, override_model=None, **kwargs: _apply_model_override(fake_llm, override_model),
         )
 
     app.dependency_overrides[get_embedder_dep] = lambda: embedder or FakeEmbedder()
@@ -688,7 +716,10 @@ class TestIdeaHappyPath:
             app.dependency_overrides.clear()
         assert response.status_code == 200
         body = response.json()
-        assert body["thesis"] == "A synthesized thesis."
+        # FakeLLM._as_json splits on first ". " — "A synthesized thesis." has
+        # none, so the whole string lands in main_thesis and content is empty.
+        assert body["main_thesis"] == "A synthesized thesis."
+        assert body["content"] == ""
         assert len(body["path"]) == 1
         assert body["path"][0]["article_title"] == "Modernism"
         assert body["stats"]["articles"] == 1
@@ -898,7 +929,8 @@ class TestIdeaStreamHappyPath:
 
         types = [e["type"] for e in events]
         assert types == ["step", "step", "step", "thesis", "done"], types
-        assert events[3]["thesis"] == "A streamed thesis body."
+        assert events[3]["main_thesis"] == "A streamed thesis body."
+        assert events[3]["content"] == ""
         assert events[4]["stats"]["articles"] == 3
         assert events[4]["stats"]["forced_jumps"] == 0
 

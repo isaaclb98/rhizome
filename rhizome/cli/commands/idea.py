@@ -6,7 +6,7 @@ import click
 
 from rhizome.config import RhizomeConfig, get_config
 from rhizome.embedder import Embedder, EmbeddingError
-from rhizome.gateway import GatewayEmbedder, GatewayError, GatewayLLM
+from rhizome.gateway import GatewayEmbedder, GatewayError, GatewayLLM, parse_thesis_json
 from rhizome.traversal.config import TraversalConfig
 from rhizome.traversal.engine import TraversalEngine
 from rhizome.traversal.engine import TraversalError, TraversalStep
@@ -17,13 +17,16 @@ PROMPT = """You are given fragments collected by a random walk through a vector 
 
 The material may come from any domain. Do not assume a discipline, a period, or a tradition; let the fragments establish what the subject is.
 
-Write one thesis: a single argument with a real claim, built by synthesizing this material. Use the fragments as evidence and as raw material. Where you need connective tissue the fragments do not supply — context, framing, a concept you know — supply it from your own knowledge, woven in as established fact.
+Return a JSON object with exactly two fields:
+
+  - "main_thesis": the single-sentence claim the argument supports. One sentence. It must be the same claim that unifies everything in "content" — not a section heading, not a topic label, not a summary.
+  - "content": the prose that argues for "main_thesis". Use the fragments as evidence and as raw material. Where you need connective tissue the fragments do not supply — context, framing, a concept you know — supply it from your own knowledge, woven in as established fact.
 
 Do not summarize the fragments in order. Do not list ideas. Do not comment on the traversal. Argue one thing, and let the collisions in the material carry it.
 
-Voice: assert. Never use first person — no "I", "we", "my", "us", in any form, including inside quotations of your own reasoning. Never hedge or narrate your process: no "I assume", "I read this as", "it seems", "one might argue", "arguably", "I take X to mean". State every claim as fact and commit to it. If the material is thin, say so as a property of the material, not as a confession about your uncertainty.
-{seed_block}
-Fragments, in walk order:
+Voice: assert. Never use first person — no "I", "we", "my", "us", in any form, including inside quotations of your own reasoning. Never hedge or narrate your process: no "I assume", "I read this as", "it seems", "one might argue", "arguably", "I take X to mean". State every claim as fact and commit to it. If the material is thin, say so as a property of the material, not as a confession about your uncertainty. The voice rule applies to "content"; "main_thesis" is a one-sentence claim and must assert it the same way.
+
+{seed_block}Fragments, in walk order:
 
 {fragments}
 """
@@ -141,7 +144,7 @@ def synthesize_idea(
     llm,
     llm_temperature: float,
     inject_seed: bool = False,
-) -> tuple[str, list, dict]:
+) -> tuple[dict, list, dict]:
     """Run a traversal then synthesize a thesis from its material.
 
     This is the core synthesis routine shared by the CLI command and the
@@ -156,15 +159,17 @@ def synthesize_idea(
         traversal_config: Resolved traversal knobs.
         embedder: Anything implementing the ``Embedder`` protocol.
         vector_store: A configured Qdrant-backed vector store.
-        llm: Anything with a ``complete(messages, temperature) -> str``
+        llm: Anything with a
+            ``complete(messages, *, temperature, max_tokens, retries, response_format) -> str``
             method (GatewayLLM or a stub).
         llm_temperature: Sampling temperature for the synthesis call.
         inject_seed: Whether the seed reaches the prompt at all. Off by
             default so the model argues from the material alone.
 
     Returns:
-        Tuple of (thesis, path, stats) where ``stats`` is a dict with
-        ``depth``, ``epsilon``, ``top_k``, ``temperature``,
+        Tuple of (thesis, path, stats) where ``thesis`` is
+        ``{"main_thesis": str, "content": str}`` and ``stats`` is a dict
+        with ``depth``, ``epsilon``, ``top_k``, ``temperature``,
         ``max_same_article_consecutive``, ``forced_jumps``, and ``articles``.
 
     Raises:
@@ -207,28 +212,39 @@ def run_traversal(query, traversal_config, embedder, vector_store) -> list:
     return engine.traverse(query)
 
 
-def synthesize_thesis(seed, path, llm, llm_temperature: float, inject_seed: bool = False) -> str:
-    """Hand a path to an LLM and return the synthesized thesis text.
+def synthesize_thesis(
+    seed, path, llm, llm_temperature: float, inject_seed: bool = False
+) -> dict:
+    """Hand a path to an LLM and return the structured thesis.
+
+    The LLM is asked to respond in JSON mode with ``{"main_thesis", "content"}``;
+    ``parse_thesis_json`` is then applied to the reply so a sloppy model that
+    wraps the object in a fence, trails prose after it, or omits a field still
+    produces a usable dict.
 
     Args:
         seed: Concept handed to the LLM as the synthesis lens when
             ``inject_seed`` is set; otherwise it only identifies the run.
         path: Ordered list of TraversalStep (the walk material).
-        llm: Anything with a ``complete(messages, temperature) -> str``
+        llm: Anything with a
+            ``complete(messages, *, temperature, max_tokens, retries, response_format) -> str``
             method (GatewayLLM or a stub).
         llm_temperature: Sampling temperature for the synthesis call.
         inject_seed: Whether the seed reaches the prompt at all.
 
     Returns:
-        Stripped thesis text.
+        ``{"main_thesis": str, "content": str}``. Either may be empty if the
+        model slipped and the parser could not recover it.
 
     Raises:
         GatewayError: The LLM call failed.
     """
-    return llm.complete(
+    raw = llm.complete(
         [{"role": "user", "content": build_prompt(seed, path, inject_seed)}],
         temperature=llm_temperature,
-    ).strip()
+        response_format={"type": "json_object"},
+    )
+    return parse_thesis_json(raw)
 
 
 def compute_stats(path, traversal_config) -> dict:
@@ -410,7 +426,13 @@ def idea(
         click.echo(f"LLM error: {exc}", err=True)
         raise click.Abort()
 
-    document = f"# {concept}\n\n{thesis}\n"
+    main_thesis = thesis.get("main_thesis", "").strip()
+    content = thesis.get("content", "").strip()
+    if main_thesis:
+        document = f"# {concept}\n\n## Thesis\n\n{main_thesis}\n\n## Argument\n\n{content}\n"
+    else:
+        # Model slipped on the schema — write what we have.
+        document = f"# {concept}\n\n{content}\n"
 
     if output:
         with open(output, "w", encoding="utf-8") as handle:

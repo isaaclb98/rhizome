@@ -272,7 +272,9 @@ class TestPromptBuilding:
         prompt = build_prompt("structure and event", [make_step(text="the fragment body")], inject_seed=True)
         assert "structure and event" in prompt
         assert "the fragment body" in prompt
-        assert "one thesis" in prompt
+        # The prompt asks for a JSON object with two fields.
+        assert "main_thesis" in prompt
+        assert '"content"' in prompt
 
     def test_prompt_omits_seed_by_default(self):
         """The seed never reaches the model unless the caller opts in.
@@ -386,10 +388,10 @@ def stubbed(monkeypatch):
             captured["llm_model"] = model
             captured["llm_base_url"] = base_url
 
-        def complete(self, messages, temperature=None, max_tokens=8192):
+        def complete(self, messages, temperature=None, max_tokens=8192, **kwargs):
             captured["prompt"] = messages[0]["content"]
             captured["llm_temperature"] = temperature
-            return "The thesis text."
+            return '{"main_thesis": "The thesis.", "content": "The thesis text."}'
 
     monkeypatch.setattr("rhizome.cli.commands.idea.GatewayLLM", StubLLM)
     monkeypatch.setattr(
