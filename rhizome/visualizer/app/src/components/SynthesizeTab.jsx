@@ -252,7 +252,7 @@ export default function SynthesizeTab({ params, setParams }) {
             </article>
           ) : isLoading ? (
             <div className="text-text-muted text-sm">
-              Synthesizing — streaming prose as it lands…
+              Synthesizing…
             </div>
           ) : (
             <div className="text-text-muted text-sm">
