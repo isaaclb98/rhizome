@@ -95,7 +95,7 @@ export default function App() {
             <h1 className="text-2xl font-bold tracking-tight text-text-primary">
               Rhizome
             </h1>
-            <span className="text-xs text-text-muted font-mono">
+            <span className="text-xs text-text-muted">
               Wikipedia semantic traversal
             </span>
           </div>
