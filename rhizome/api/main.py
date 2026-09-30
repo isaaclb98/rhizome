@@ -212,6 +212,9 @@ async def lifespan(app: FastAPI):
             openai_api_key=config.openai_api_key,
             hf_api_token=config.hf_api_token,
             hf_model=config.hf_model,
+            gateway_url=config.llm_gateway_url,
+            gateway_model=config.embedding_model,
+            gateway_api_key=config.llm_gateway_api_key,
         )
         app.state.embedder = embedder
         app.dependency_overrides[get_embedder_dep] = lambda: embedder

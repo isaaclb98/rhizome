@@ -7,10 +7,13 @@ Env vars:
     QDRANT_URL           — Qdrant server URL (default: http://localhost:6333)
     QDRANT_COLLECTION    — Qdrant collection name (required)
     QDRANT_API_KEY      — Qdrant API key (optional)
-    EMBEDDER_TYPE       — Embedder type: openai or huggingface (required)
+    EMBEDDER_TYPE       — Embedder type: openai, huggingface, or gateway (default: openai)
     OPENAI_API_KEY      — OpenAI API key (required if EMBEDDER_TYPE=openai)
     HF_API_TOKEN        — HuggingFace API token (required if EMBEDDER_TYPE=huggingface)
     HF_MODEL            — HuggingFace model (default: sentence-transformers/all-MiniLM-L6-v2)
+    LLM_GATEWAY_URL     — OpenAI-compatible gateway base URL (required if EMBEDDER_TYPE=gateway,
+                          and always required for `rhizome idea` / the /idea endpoints)
+    EMBEDDING_MODEL     — Embedding model name when using the gateway
     DEFAULT_DEPTH       — Default traversal depth (default: 8)
     EPSILON             — Epsilon-greedy exploration probability (default: 0.1)
     WIKIPEDIA_DEPTH     — PetScan subcategory depth for Wikipedia article discovery (default: 1)
@@ -21,10 +24,13 @@ Env vars:
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Literal
 
 from pydantic import Field, field_validator, ConfigDict
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 class RhizomeConfig(BaseSettings):
@@ -38,6 +44,9 @@ class RhizomeConfig(BaseSettings):
         env_prefix="",          # No prefix — env vars are already uppercase
         populate_by_name=True,   # Allow field name OR alias in code
         case_sensitive=False,
+        env_file=REPO_ROOT / ".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
     )
 
     # Vector store
@@ -52,7 +61,7 @@ class RhizomeConfig(BaseSettings):
     qdrant_api_key: str | None = Field(default=None, alias="QDRANT_API_KEY")
 
     # Embedder
-    embedder_type: Literal["openai", "huggingface"] = Field(
+    embedder_type: Literal["openai", "huggingface", "gateway"] = Field(
         default="openai",
         alias="EMBEDDER_TYPE",
     )
@@ -124,9 +133,10 @@ class RhizomeConfig(BaseSettings):
         """Normalize embedder type to lowercase."""
         if isinstance(v, str):
             v = v.lower().strip()
-        if v not in ("openai", "huggingface"):
+        if v not in ("openai", "huggingface", "gateway"):
             raise ValueError(
-                f"EMBEDDER_TYPE must be 'openai' or 'huggingface', got '{v}'"
+                "EMBEDDER_TYPE must be 'openai', 'huggingface', or 'gateway', "
+                f"got '{v}'"
             )
         return v
 

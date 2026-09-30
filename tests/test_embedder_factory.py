@@ -67,4 +67,4 @@ class TestEmbedderFactory:
         """Invalid embedder_type raises EmbeddingError."""
         with pytest.raises(EmbeddingError) as exc_info:
             get_embedder(embedder_type="anthropic", openai_api_key="sk-test")
-        assert "EMBEDDER_TYPE must be 'openai' or 'huggingface'" in str(exc_info.value)
+        assert "EMBEDDER_TYPE must be 'openai', 'huggingface', or 'gateway'" in str(exc_info.value)

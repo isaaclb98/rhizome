@@ -39,7 +39,7 @@ class TestRhizomeConfig:
                 EMBEDDER_TYPE="invalid",
                 OPENAI_API_KEY="sk-test",
             )
-        assert "EMBEDDER_TYPE must be 'openai' or 'huggingface'" in str(exc_info.value)
+        assert "EMBEDDER_TYPE must be 'openai', 'huggingface', or 'gateway'" in str(exc_info.value)
 
     def test_resolve_env_var_syntax(self):
         """${VAR} syntax resolves to environment variable value."""
