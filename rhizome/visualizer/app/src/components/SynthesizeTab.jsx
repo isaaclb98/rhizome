@@ -135,10 +135,10 @@ export default function SynthesizeTab({ params, setParams }) {
       {/* Header */}
       <header className="flex-none bg-bg-secondary border-b border-border px-4 py-3">
         <div className="flex items-center gap-3 mb-3">
-          <h2 className="text-lg font-bold tracking-tight text-text-primary">
+          <h2 className="text-lg font-semibold tracking-tight text-text-primary">
             Synthesize
           </h2>
-          <span className="text-xs text-text-muted font-mono">
+          <span className="text-xs text-text-muted">
             Walk the corpus, then forge a thesis from the material
           </span>
         </div>
