@@ -4,12 +4,12 @@ from pathlib import Path
 
 import click
 
-from rhizome.config import get_config
-from rhizome.embedder import EmbeddingError
+from rhizome.config import RhizomeConfig, get_config
+from rhizome.embedder import Embedder, EmbeddingError
 from rhizome.gateway import GatewayEmbedder, GatewayError, GatewayLLM
 from rhizome.traversal.config import TraversalConfig
 from rhizome.traversal.engine import TraversalEngine
-from rhizome.traversal.engine import TraversalError
+from rhizome.traversal.engine import TraversalError, TraversalStep
 from rhizome.vectorstore.client import VectorStoreClient
 from rhizome.vectorstore.collection import CollectionManager
 
@@ -111,6 +111,121 @@ def build_prompt(seed: str, path) -> str:
         The prompt string.
     """
     return PROMPT.format(seed=seed, fragments=format_fragments(path))
+
+
+def synthesize_idea(
+    query: str,
+    seed: str,
+    traversal_config: TraversalConfig,
+    embedder: Embedder,
+    vector_store: VectorStoreClient,
+    llm,
+    llm_temperature: float,
+) -> tuple[str, list, dict]:
+    """Run a traversal then synthesize a thesis from its material.
+
+    This is the core synthesis routine shared by the CLI command and the
+    HTTP API. It performs no I/O beyond calling the supplied embedder,
+    vector store, and LLM, so it can be invoked from any process.
+
+    Args:
+        query: Starting concept for the traversal (also used as the seed if
+            the caller passed the same string for both).
+        seed: Concept handed to the LLM as the synthesis lens.
+        traversal_config: Resolved traversal knobs.
+        embedder: Anything implementing the ``Embedder`` protocol.
+        vector_store: A configured Qdrant-backed vector store.
+        llm: Anything with a ``complete(messages, temperature) -> str``
+            method (GatewayLLM or a stub).
+        llm_temperature: Sampling temperature for the synthesis call.
+
+    Returns:
+        Tuple of (thesis, path, stats) where ``stats`` is a dict with
+        ``depth``, ``epsilon``, ``top_k``, ``temperature``,
+        ``max_same_article_consecutive``, ``forced_jumps``, and ``articles``.
+
+    Raises:
+        TraversalError: The walk could not be completed.
+        EmbeddingError: The embedder rejected a request.
+        GatewayError: The LLM call failed.
+        ValueError: The walk produced an empty path.
+    """
+    path = run_traversal(query, traversal_config, embedder, vector_store)
+    if not path:
+        raise ValueError(
+            "Walk produced no path. The corpus may be too small or the "
+            "concept too specific."
+        )
+
+    thesis = synthesize_thesis(seed, path, llm, llm_temperature)
+    stats = compute_stats(path, traversal_config)
+    return thesis, path, stats
+
+
+def run_traversal(query, traversal_config, embedder, vector_store) -> list:
+    """Run a traversal and return its path. Pure pass-through to the engine.
+
+    Args:
+        query: Starting concept for the walk.
+        traversal_config: Resolved traversal knobs.
+        embedder: Anything implementing the ``Embedder`` protocol.
+        vector_store: A configured Qdrant-backed vector store.
+
+    Returns:
+        Ordered list of TraversalStep.
+
+    Raises:
+        TraversalError: The walk could not be completed.
+        EmbeddingError: The embedder rejected a request.
+    """
+    engine = TraversalEngine(
+        embedder=embedder, vector_store=vector_store, config=traversal_config
+    )
+    return engine.traverse(query)
+
+
+def synthesize_thesis(seed, path, llm, llm_temperature: float) -> str:
+    """Hand a path to an LLM and return the synthesized thesis text.
+
+    Args:
+        seed: Concept handed to the LLM as the synthesis lens.
+        path: Ordered list of TraversalStep (the walk material).
+        llm: Anything with a ``complete(messages, temperature) -> str``
+            method (GatewayLLM or a stub).
+        llm_temperature: Sampling temperature for the synthesis call.
+
+    Returns:
+        Stripped thesis text.
+
+    Raises:
+        GatewayError: The LLM call failed.
+    """
+    return llm.complete(
+        [{"role": "user", "content": build_prompt(seed, path)}],
+        temperature=llm_temperature,
+    ).strip()
+
+
+def compute_stats(path, traversal_config) -> dict:
+    """Summarize a traversal run as a small dict.
+
+    Args:
+        path: Ordered list of TraversalStep.
+        traversal_config: Resolved traversal knobs.
+
+    Returns:
+        Dict with ``depth``, ``epsilon``, ``top_k``, ``temperature``,
+        ``max_same_article_consecutive``, ``forced_jumps``, ``articles``.
+    """
+    return {
+        "depth": traversal_config.depth,
+        "epsilon": traversal_config.epsilon,
+        "top_k": traversal_config.top_k,
+        "temperature": traversal_config.temperature,
+        "max_same_article_consecutive": traversal_config.max_same_article_consecutive,
+        "forced_jumps": sum(1 for step in path if step.forced_jump),
+        "articles": len({step.article_title for step in path}),
+    }
 
 
 @click.command()
@@ -217,10 +332,15 @@ def idea(
         temperature=temperature,
         max_same_article_consecutive=max_same_article_consecutive,
     )
-    engine = TraversalEngine(embedder=embedder, vector_store=vector_store, config=config)
+
+    llm = GatewayLLM(
+        base_url=cfg.llm_gateway_url,
+        model=model or cfg.llm_model,
+        api_key=cfg.llm_gateway_api_key,
+    )
 
     try:
-        path = engine.traverse(concept)
+        path = run_traversal(concept, config, embedder, vector_store)
     except TraversalError as exc:
         click.echo(f"Traversal error: {exc}", err=True)
         raise click.Abort()
@@ -250,23 +370,15 @@ def idea(
             handle.write(render_material(concept, path, config))
         click.echo(f"Material written to: {side}", err=True)
 
-    llm = GatewayLLM(
-        base_url=cfg.llm_gateway_url,
-        model=model or cfg.llm_model,
-        api_key=cfg.llm_gateway_api_key,
-    )
     click.echo(f"Synthesizing with {llm.model}…", err=True)
 
     try:
-        thesis = llm.complete(
-            [{"role": "user", "content": build_prompt(concept, path)}],
-            temperature=llm_temperature,
-        )
+        thesis = synthesize_thesis(concept, path, llm, llm_temperature)
     except GatewayError as exc:
         click.echo(f"LLM error: {exc}", err=True)
         raise click.Abort()
 
-    document = f"# {concept}\n\n{thesis.strip()}\n"
+    document = f"# {concept}\n\n{thesis}\n"
 
     if output:
         with open(output, "w", encoding="utf-8") as handle:
