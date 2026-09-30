@@ -92,7 +92,7 @@ export default function App() {
       <header className="flex-none bg-bg-secondary border-b border-border px-4 py-2.5">
         <div className="flex items-center justify-between">
           <div className="flex items-baseline gap-2">
-            <h1 className="text-base font-semibold tracking-tight text-text-primary">
+            <h1 className="text-lg font-serif font-semibold tracking-tight text-text-primary">
               Rhizome
             </h1>
             <span className="text-xs text-text-muted">
@@ -101,16 +101,16 @@ export default function App() {
           </div>
           <ThemeButton theme={theme} onToggle={toggleTheme} />
         </div>
-        <nav className="flex gap-1 mt-3" role="tablist">
+        <nav className="flex gap-6 mt-3 -mb-2.5" role="tablist">
           <button
             type="button"
             role="tab"
             aria-selected={tab === 'synthesize'}
             onClick={() => setTab('synthesize')}
-            className={`px-4 py-2 text-sm rounded-t border border-b-0 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+            className={`py-2 text-sm transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-sm ${
               tab === 'synthesize'
-                ? 'bg-bg-primary border-border text-text-primary'
-                : 'bg-transparent border-transparent text-text-muted hover:text-text-primary'
+                ? 'text-text-primary border-b-2 border-accent'
+                : 'text-text-muted hover:text-text-secondary border-b-2 border-transparent'
             }`}
           >
             Synthesize
@@ -120,10 +120,10 @@ export default function App() {
             role="tab"
             aria-selected={tab === 'traverse'}
             onClick={() => setTab('traverse')}
-            className={`px-4 py-2 text-sm rounded-t border border-b-0 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+            className={`py-2 text-sm transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-sm ${
               tab === 'traverse'
-                ? 'bg-bg-primary border-border text-text-primary'
-                : 'bg-transparent border-transparent text-text-muted hover:text-text-primary'
+                ? 'text-text-primary border-b-2 border-accent'
+                : 'text-text-muted hover:text-text-secondary border-b-2 border-transparent'
             }`}
           >
             Traverse
@@ -138,6 +138,22 @@ export default function App() {
           <TraverseTab params={params} setParams={setParams} />
         )}
       </div>
+
+      <footer className="flex-none border-t border-border bg-bg-secondary px-4 py-1.5">
+        <div className="flex items-center justify-between text-[11px] text-text-muted">
+          <div className="flex items-center gap-4">
+            <span className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              <span>Wikipedia · 832K chunks</span>
+            </span>
+            <span>isaac-quality · claude-opus-4-6-thinking</span>
+          </div>
+          <div className="flex items-center gap-4">
+            <span>default walk: 10 steps</span>
+            <span>ε 0.10 · temp 1.0</span>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
