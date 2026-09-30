@@ -2,22 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import TraverseTab from './components/TraverseTab.jsx';
 import SynthesizeTab from './components/SynthesizeTab.jsx';
 
-const EXAMPLE_QUERIES = [
-  'the tension between modernism and postmodernism',
-  'what is the relationship between art and technology',
-  'the aesthetics of modernism',
-  'how did Abstract Expressionism influence contemporary art',
-  'the death of the author and literary theory',
-  'indeterminacy in art and philosophy',
-  'fragmentation',
-];
-
 const DEFAULT_PARAMS = {
-  query: EXAMPLE_QUERIES[Math.floor(Math.random() * EXAMPLE_QUERIES.length)],
   depth: 10,
-  epsilon: 0.1,
-  top_k: 30,
-  temperature: 1.0,
+  exploration: 0.10,
   max_same_article_consecutive: 2,
   inject_seed: false,
 };
@@ -150,7 +137,7 @@ export default function App() {
           </div>
           <div className="flex items-center gap-4">
             <span>default walk: 10 steps</span>
-            <span>ε 0.10 · temp 1.0</span>
+            <span>exploration 0.10 · same-art 2</span>
           </div>
         </div>
       </footer>

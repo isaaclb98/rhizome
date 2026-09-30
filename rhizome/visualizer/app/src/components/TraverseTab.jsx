@@ -3,22 +3,9 @@ import Controls from './Controls.jsx';
 import Graph from './Graph.jsx';
 import PathPanel from './PathPanel.jsx';
 
-const EXAMPLE_QUERIES = [
-  'the tension between modernism and postmodernism',
-  'what is the relationship between art and technology',
-  'the aesthetics of modernism',
-  'how did Abstract Expressionism influence contemporary art',
-  'the death of the author and literary theory',
-  'indeterminacy in art and philosophy',
-  'fragmentation',
-];
-
 const DEFAULT_PARAMS = {
-  query: EXAMPLE_QUERIES[Math.floor(Math.random() * EXAMPLE_QUERIES.length)],
   depth: 10,
-  epsilon: 0.1,
-  top_k: 30,
-  temperature: 1.0,
+  exploration: 0.10,
   max_same_article_consecutive: 2,
 };
 
@@ -50,9 +37,7 @@ export default function TraverseTab({ params, setParams }) {
     forcedJumpsRef.current = 0;
     setStats({
       depth: requestParams.depth,
-      epsilon: requestParams.epsilon,
-      top_k: requestParams.top_k,
-      temperature: requestParams.temperature,
+      exploration: requestParams.exploration,
       max_same_article_consecutive: requestParams.max_same_article_consecutive,
       forced_jumps: 0,
     });
@@ -217,16 +202,8 @@ export default function TraverseTab({ params, setParams }) {
             <span className="text-text-primary">{stats.depth}</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span>ε</span>
-            <span className="text-text-primary">{stats.epsilon}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span>top_k</span>
-            <span className="text-text-primary">{stats.top_k}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span>temp</span>
-            <span className="text-text-primary">{stats.temperature}</span>
+            <span>Exploration</span>
+            <span className="text-text-primary">{stats.exploration?.toFixed?.(2) ?? '–'}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span>same-art</span>

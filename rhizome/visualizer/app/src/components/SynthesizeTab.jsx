@@ -1,6 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import Markdown from 'react-markdown';
 import Examples from './Examples.jsx';
+import Slider from './Slider.jsx';
+import { explorationToParams } from '../exploration.js';
 
 export default function SynthesizeTab({ params, setParams }) {
   const [thesis, setThesis] = useState({ main_thesis: '', content: '' });
@@ -12,10 +14,9 @@ export default function SynthesizeTab({ params, setParams }) {
   const abortControllerRef = useRef(null);
 
   const [localParams, setLocalParams] = useState({
-    query: params.query,
+    query: '',
     depth: params.depth,
-    epsilon: params.epsilon,
-    temperature: params.temperature,
+    exploration: params.exploration,
     max_same_article_consecutive: params.max_same_article_consecutive,
     inject_seed: params.inject_seed,
   });
@@ -40,13 +41,15 @@ export default function SynthesizeTab({ params, setParams }) {
     setError(null);
     setIsLoading(true);
 
+    // Derive epsilon + temperature from the single Exploration slider
+    const { epsilon, temperature } = explorationToParams(localParams.exploration);
+
     if (setParams) {
       setParams({
         ...params,
         query: localParams.query,
         depth: localParams.depth,
-        epsilon: localParams.epsilon,
-        temperature: localParams.temperature,
+        exploration: localParams.exploration,
         max_same_article_consecutive: localParams.max_same_article_consecutive,
       });
     }
@@ -55,7 +58,14 @@ export default function SynthesizeTab({ params, setParams }) {
       const response = await fetch('/idea/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(localParams),
+        body: JSON.stringify({
+          query: localParams.query,
+          depth: localParams.depth,
+          epsilon,
+          temperature,
+          max_same_article_consecutive: localParams.max_same_article_consecutive,
+          inject_seed: localParams.inject_seed,
+        }),
         signal: controller.signal,
       });
 
@@ -152,47 +162,43 @@ export default function SynthesizeTab({ params, setParams }) {
             />
           </div>
           <div className="w-20">
-            <label className={labelClass} htmlFor="depth">Depth</label>
+            <label className={labelClass} htmlFor="depth">Length</label>
             <input
               id="depth" type="number" min="1" max="50"
               value={localParams.depth}
               onChange={(e) => updateParam('depth', Number(e.target.value))}
               className={inputClass}
               disabled={isLoading}
-              title="How many steps the walk takes from the seed. Each step picks the next chunk from the corpus based on similarity. Default 10."
+              title="How many steps the walk takes. Each step reads one chunk of Wikipedia. Default 10."
             />
           </div>
-          <div className="w-20">
-            <label className={labelClass} htmlFor="epsilon">ε</label>
-            <input
-              id="epsilon" type="number" min="0" max="1" step="0.05"
-              value={localParams.epsilon}
-              onChange={(e) => updateParam('epsilon', Number(e.target.value))}
-              className={inputClass}
+          <div className="w-44">
+            <div className="flex items-baseline justify-between mb-1">
+              <label className={labelClass}>Exploration</label>
+              <span className="text-xs text-text-muted font-mono">
+                {localParams.exploration.toFixed(2)}
+              </span>
+            </div>
+            <Slider
+              value={localParams.exploration}
+              onChange={(v) => updateParam('exploration', v)}
+              min={0}
+              max={1}
+              step={0.01}
               disabled={isLoading}
-              title="Exploration probability. 0 = always pick the most-similar chunk (greedy). 1 = always pick at random. 0.1 is a small nudge toward surprise."
+              ariaLabel="Exploration"
             />
-          </div>
-          <div className="w-20">
-            <label className={labelClass} htmlFor="temp">temp</label>
-            <input
-              id="temp" type="number" min="0" max="3" step="0.1"
-              value={localParams.temperature}
-              onChange={(e) => updateParam('temperature', Number(e.target.value))}
-              className={inputClass}
-              disabled={isLoading}
-              title="Softness of the pick. 0 = always the most-similar non-blocked candidate. Higher = more likely to pick a less-similar one. Affects randomness independently of epsilon."
-            />
+            <p className="text-[11px] text-text-muted mt-0.5">stay on topic ↔ wander</p>
           </div>
           <div className="w-24">
-            <label className={labelClass} htmlFor="same-art">same-art</label>
+            <label className={labelClass} htmlFor="same-art">Same art.</label>
             <input
               id="same-art" type="number" min="0" max="10"
               value={localParams.max_same_article_consecutive}
               onChange={(e) => updateParam('max_same_article_consecutive', Number(e.target.value))}
               className={inputClass}
               disabled={isLoading}
-              title="How many consecutive steps can come from the same Wikipedia article. After this many, the walker is forced to jump to a different article. 0 disables the rule."
+              title="Force a new article after this many consecutive steps. 0 disables the rule. Default 2."
             />
           </div>
 
