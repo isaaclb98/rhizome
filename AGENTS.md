@@ -8,13 +8,17 @@ Rhizome is a CLI tool for rhizomatic traversal of Wikipedia embeddings. It walks
 
 ```
 rhizome/
-  config.py        — Pydantic config (env vars: QDRANT_URL, HF_API_TOKEN, etc.)
+  config.py        — Pydantic config (env vars: QDRANT_URL, EMBEDDER_TYPE, etc.)
+                     Reads the repo .env via pydantic-settings `env_file`.
   corpus/          — Wikipedia ingestion + chunking
   embedder/        — Embedding provider interface (OpenAI, HuggingFace)
-  embedder/factory.py — Embedder factory (get_embedder)
+  embedder/factory.py — Embedder factory (get_embedder: openai|huggingface|gateway)
+  gateway.py       — OpenAI-compatible gateway clients (GatewayLLM, GatewayEmbedder)
   vectorstore/     — Qdrant client wrapper + collection management
   traversal/       — Epsilon-greedy traversal engine
   stitching/       — Markdown formatter with citations
+  api/main.py      — FastAPI app (/traverse, /idea, static frontend)
+  visualizer/app/  — Vite + React frontend (Synthesize and Traverse tabs)
   cli/             — Click CLI commands
 
 .env.example       — Environment variables template
@@ -33,12 +37,37 @@ rhizome traverse "the tension between modernism and postmodernism" --depth 8
 
 # Synthesize a thesis from a traversal (needs LLM_GATEWAY_URL)
 rhizome idea "the tension between structure and event" -o thesis.md --save-material
+
+# Serve the API + visualizer locally
+cd rhizome/visualizer/app
+VITE_OUTPUT_DIR=$PWD/dist npm run build
+RHIZOME_STATIC_DIR=$PWD/dist uvicorn rhizome.api.main:app --host 127.0.0.1 --port 8765
 ```
+
+The API reads `.env` from the repo root, so no extra env plumbing is needed for
+local runs. Embedding is optional: if the embedder cannot be built at startup
+(missing `OPENAI_API_KEY` with `EMBEDDER_TYPE=openai`), the server still comes up
+and embedding-dependent routes return 503. Set `EMBEDDER_TYPE=gateway` to embed
+through `LLM_GATEWAY_URL` without any key.
+
+## API routes
+
+- `POST /traverse` — walk, return path + stitched material
+- `POST /traverse/stream` — same, as SSE `step` events
+- `POST /idea` — walk then synthesize; returns `{thesis, path, stats}`
+- `POST /idea/stream` — SSE: `step` events during the walk, one `thesis` event,
+  then `done` with stats. The LLM call itself is not token-streamed.
+
+`/idea` shares its helpers with the CLI (`run_traversal`, `synthesize_thesis`,
+`compute_stats` in `rhizome/cli/commands/idea.py`) so the two paths cannot drift.
+A per-request `llm_model` overrides the configured model.
 
 ## Key design decisions
 
 - **No LLM prose in stitching** — `traverse` outputs original Wikipedia text with citations
 - **`idea` is deliberately minimal** — one walk, one LLM call, one thesis in prose. No planner, no verification stage, no critic, no quality gate; the reader judges the output. All traversal knobs are exposed rather than auto-tuned.
+- **Route order in `api/main.py` is load-bearing** — Starlette matches in registration order, and a `StaticFiles` mount matches every path. Any mount at `/` declared mid-module silently swallows later API routes, answering POSTs with `{"detail":"Method Not Allowed"}` that looks exactly like a routing miss. Keep static mounts last and scoped to `/assets`. `TestRouteOrdering` in `tests/test_api.py` enforces this.
+- **Embedding is optional** — a failed embedder at startup logs and continues; routes that need it return 503. This lets the API serve the visualizer and the `/idea` endpoints on machines with no embedding credentials.
 - **The traversal engine is never steered mid-walk** — `idea` acts on it only through its inputs (seed, epsilon, temperature, depth, top_k) and by reading its output. Retrieval stays autonomous; judgement lives entirely in synthesis.
 - **Seed is a lens, not a redirect** — verified by A/B: with heterogeneous walk material the seed decides which collision gets argued, but it cannot change the material. So `--epsilon`/`--depth` matter more than the seed phrasing.
 - **`--save-material`** writes the walked fragments beside the thesis so a run stays traceable; the walk is non-deterministic, so without it a run is unreproducible once the process exits. Written before the LLM call so a synthesis failure does not discard the walk.
