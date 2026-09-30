@@ -53,23 +53,34 @@ STATIC_DIR = Path(os.environ.get("RHIZOME_STATIC_DIR", "/app/static"))
 def get_embedder_dep() -> Embedder:
     """Return the shared embedder instance.
 
-    Lifespan sets `app.state.embedder`. Tests override this dependency with a
-    fake via `app.dependency_overrides[get_embedder_dep] = lambda: fake`.
+    Lifespan sets `app.state.embedder` and registers a default override at
+    startup. Tests override this dependency with a fake via
+    ``app.dependency_overrides[get_embedder_dep] = lambda: fake``.
+
+    If no override is registered and lifespan failed to initialize the
+    embedder (e.g. credentials missing in dev), this raises 503 rather than
+    raising at startup — the API can serve routes that don't need embeddings
+    (like /health and the SPA) even when embeddings aren't configured.
     """
-    raise RuntimeError(
-        "get_embedder_dep called without lifespan initialization. "
-        "Tests must use app.dependency_overrides[get_embedder_dep] = lambda: fake."
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail=(
+            "Embedder is not initialized. Either provide embedding "
+            "credentials in the environment, or run behind a setup that "
+            "registers an embedder via app.dependency_overrides."
+        ),
     )
 
 
 def get_vector_store_dep() -> VectorStoreClient:
     """Return the shared vector store instance.
 
-    Same override pattern as get_embedder_dep.
+    Same override pattern as ``get_embedder_dep``. Returns 503 if not
+    initialized rather than failing at startup.
     """
-    raise RuntimeError(
-        "get_vector_store_dep called without lifespan initialization. "
-        "Tests must use app.dependency_overrides[get_vector_store_dep] = lambda: fake."
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Vector store is not initialized.",
     )
 
 
@@ -179,44 +190,58 @@ class IdeaResponse(BaseModel):
 async def lifespan(app: FastAPI):
     """Initialize embedder and clients at startup.
 
-    Production path: builds real embedder + vector store, attaches to app.state,
-    and registers them as the default dependency implementations.
+    Production path: builds real embedder + vector store, attaches to
+    app.state, and registers them as the default dependency implementations.
 
-    Tests bypass this entirely via `app.dependency_overrides` and create the
-    app with `TestClient(app)` *without* triggering lifespan (TestClient runs
-    lifespan by default; pass `raise_server_exceptions=False` only if you want
-    to inspect startup errors).
+    Tests bypass this entirely via ``app.dependency_overrides`` and create
+    the app with ``TestClient(app)`` (TestClient runs lifespan by default;
+    pass ``raise_server_exceptions=False`` only if you want to inspect
+    startup errors).
+
+    Embedding and vector store initialization are best-effort: a missing
+    OpenAI key or unreachable Qdrant at startup does not prevent the API
+    from serving. Routes that need those resources will fail with 503 when
+    called, instead of the entire process refusing to start.
     """
     config = get_config()
-    log.info("Initializing embedder: type=%s", config.embedder_type)
 
     try:
+        log.info("Initializing embedder: type=%s", config.embedder_type)
         embedder = get_embedder(
             embedder_type=config.embedder_type,
             openai_api_key=config.openai_api_key,
             hf_api_token=config.hf_api_token,
             hf_model=config.hf_model,
         )
+        app.state.embedder = embedder
+        app.dependency_overrides[get_embedder_dep] = lambda: embedder
+        log.info("Embedder initialized successfully")
     except Exception as e:
-        log.error("Embedder initialization failed: %s", e)
-        raise  # Fail fast — app cannot serve without embedder
+        log.warning(
+            "Embedder initialization skipped: %s. Routes requiring an "
+            "embedder will return 503 until one is configured.",
+            e,
+        )
 
-    vector_store = VectorStoreClient(
-        url=config.qdrant_url,
-        api_key=config.qdrant_api_key,
-        collection_name=config.qdrant_collection,
-    )
+    try:
+        vector_store = VectorStoreClient(
+            url=config.qdrant_url,
+            api_key=config.qdrant_api_key,
+            collection_name=config.qdrant_collection,
+        )
+        app.state.vector_store = vector_store
+        app.dependency_overrides[get_vector_store_dep] = lambda: vector_store
+        log.info("Vector store initialized successfully")
+    except Exception as e:
+        log.warning(
+            "Vector store initialization skipped: %s. Routes requiring "
+            "the vector store will return 503 until one is reachable.",
+            e,
+        )
 
-    app.state.embedder = embedder
-    app.state.vector_store = vector_store
     app.state.config = config
-
-    # Register production implementations. Tests override these.
-    app.dependency_overrides[get_embedder_dep] = lambda: embedder
-    app.dependency_overrides[get_vector_store_dep] = lambda: vector_store
     app.dependency_overrides[get_config_dep] = lambda: config
 
-    log.info("Embedder and clients initialized successfully")
     yield
     # Cleanup on shutdown (nothing to clean up)
 
