@@ -9,6 +9,9 @@ Contract coverage:
   /traverse    — happy path, missing collection, traversal error, embedding
                  error, validation (422) for out-of-range params
   /traverse/stream — emitted SSE events are well-formed
+  /idea        — happy path, missing collection, gateway missing, LLM error,
+                 missing seed defaults to query
+  /idea/stream — step, thesis, done events in order, error and cancel paths
 
 Each test asserts shape and status, not implementation details.
 """
@@ -22,6 +25,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from rhizome.api.main import (
+    _get_llm_dep,
     app,
     get_config_dep,
     get_embedder_dep,
@@ -596,3 +600,308 @@ class TestTraverseStream:
         finally:
             app.dependency_overrides.clear()
         assert response.status_code == 503
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# /idea — synchronous thesis synthesis
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class FakeLLM:
+    """Drop-in for GatewayLLM.complete() used by /idea."""
+
+    def __init__(self, text: str = "A synthesized thesis.") -> None:
+        self.model = "fake-model"
+        self._text = text
+        self.calls: list = []
+
+    def complete(self, messages, temperature):
+        self.calls.append({"messages": messages, "temperature": temperature})
+        return self._text
+
+
+def _patch_idea_dependencies(
+    *,
+    path: list[TraversalStep] | None = None,
+    traverse_raises: Exception | None = None,
+    llm_text: str = "A synthesized thesis.",
+    llm_raises: Exception | None = None,
+    vector_store: FakeVectorStore | None = None,
+    embedder: Embedder | None = None,
+    config: RhizomeConfig | None = None,
+    monkeypatch=None,
+    also_patch_api_engine: bool = False,
+):
+    """Wire the FastAPI deps to fakes. Returns (engine, llm).
+
+    The /idea endpoint calls ``run_traversal`` from the CLI module, so the
+    engine is monkeypatched at ``rhizome.cli.commands.idea.TraversalEngine``.
+    The /idea/stream endpoint builds ``TraversalEngine`` in the API module,
+    so it needs ``also_patch_api_engine=True`` to additionally patch
+    ``rhizome.api.main.TraversalEngine``.
+    """
+    fake_engine = FakeTraversalEngine(path=path, traverse_raises=traverse_raises)
+    fake_llm = FakeLLM(text=llm_text)
+    if llm_raises is not None:
+        fake_llm.complete = lambda messages, temperature: (_ for _ in ()).throw(llm_raises)
+
+    if monkeypatch is not None:
+        monkeypatch.setattr(
+            "rhizome.cli.commands.idea.TraversalEngine",
+            lambda embedder, vector_store, config: fake_engine,
+        )
+        if also_patch_api_engine:
+            monkeypatch.setattr(
+                "rhizome.api.main.TraversalEngine",
+                lambda embedder, vector_store, config: fake_engine,
+            )
+
+    app.dependency_overrides[get_embedder_dep] = lambda: embedder or FakeEmbedder()
+    app.dependency_overrides[get_vector_store_dep] = lambda: vector_store or FakeVectorStore(
+        collection_exists=True
+    )
+    app.dependency_overrides[get_config_dep] = lambda: config or make_config(
+        llm_gateway_url="http://fake-gateway:30128"
+    )
+    app.dependency_overrides[_get_llm_dep] = lambda: fake_llm
+    return fake_engine, fake_llm
+
+
+class TestIdeaHappyPath:
+    def test_returns_thesis_path_and_stats(self, client, monkeypatch):
+        step = make_traversal_step()
+        _, llm = _patch_idea_dependencies(
+            path=[step], monkeypatch=monkeypatch
+        )
+        try:
+            response = client.post("/idea", json={"query": "the seed"})
+        finally:
+            app.dependency_overrides.clear()
+        assert response.status_code == 200
+        body = response.json()
+        assert body["thesis"] == "A synthesized thesis."
+        assert len(body["path"]) == 1
+        assert body["path"][0]["article_title"] == "Modernism"
+        assert body["stats"]["articles"] == 1
+        assert body["stats"]["forced_jumps"] == 0
+        assert body["stats"]["model"] == "fake-model"
+        assert len(llm.calls) == 1
+        assert llm.calls[0]["messages"][0]["role"] == "user"
+
+    def test_seed_defaults_to_query(self, client, monkeypatch):
+        _, llm = _patch_idea_dependencies(
+            path=[make_traversal_step()], monkeypatch=monkeypatch
+        )
+        try:
+            client.post("/idea", json={"query": "the tension"})
+        finally:
+            app.dependency_overrides.clear()
+        assert "Seed: the tension" in llm.calls[0]["messages"][0]["content"]
+
+    def test_seed_overrides_query(self, client, monkeypatch):
+        _, llm = _patch_idea_dependencies(
+            path=[make_traversal_step()], monkeypatch=monkeypatch
+        )
+        try:
+            client.post("/idea", json={"query": "walked concept", "seed": "lens"})
+        finally:
+            app.dependency_overrides.clear()
+        assert "Seed: lens" in llm.calls[0]["messages"][0]["content"]
+
+    def test_llm_model_override(self, client, monkeypatch):
+        _, llm = _patch_idea_dependencies(
+            path=[make_traversal_step()], monkeypatch=monkeypatch
+        )
+        # When req.llm_model is set, the endpoint constructs a fresh GatewayLLM
+        # via _build_llm. Patch _build_llm to return our fake with the requested
+        # model so we can verify the override takes effect end-to-end.
+        def fake_build_llm(config, model_override):
+            llm.model = model_override or llm.model
+            return llm
+        monkeypatch.setattr("rhizome.api.main._build_llm", fake_build_llm)
+        try:
+            client.post("/idea", json={"query": "x", "llm_model": "isaac-quality"})
+        finally:
+            app.dependency_overrides.clear()
+        assert llm.model == "isaac-quality"
+
+
+class TestIdeaErrorPaths:
+    def test_400_when_collection_missing(self, client, monkeypatch):
+        _patch_idea_dependencies(
+            path=[make_traversal_step()],
+            vector_store=FakeVectorStore(collection_exists=False),
+            monkeypatch=monkeypatch,
+        )
+        try:
+            response = client.post("/idea", json={"query": "x"})
+        finally:
+            app.dependency_overrides.clear()
+        assert response.status_code == 400
+        assert "not found" in response.json()["detail"]
+
+    def test_503_when_qdrant_unreachable(self, client, monkeypatch):
+        _patch_idea_dependencies(
+            vector_store=FakeVectorStore(get_collection_raises=True),
+            monkeypatch=monkeypatch,
+        )
+        try:
+            response = client.post("/idea", json={"query": "x"})
+        finally:
+            app.dependency_overrides.clear()
+        assert response.status_code == 503
+
+    def test_503_when_gateway_unconfigured(self, client, monkeypatch):
+        _patch_idea_dependencies(
+            config=make_config(llm_gateway_url=""),
+            monkeypatch=monkeypatch,
+        )
+        try:
+            response = client.post("/idea", json={"query": "x"})
+        finally:
+            app.dependency_overrides.clear()
+        assert response.status_code == 503
+        assert "LLM gateway" in response.json()["detail"]
+
+    def test_500_on_traversal_error(self, client, monkeypatch):
+        from rhizome.traversal.engine import TraversalError
+        _patch_idea_dependencies(
+            traverse_raises=TraversalError("walk blew up"),
+            monkeypatch=monkeypatch,
+        )
+        try:
+            response = client.post("/idea", json={"query": "x"})
+        finally:
+            app.dependency_overrides.clear()
+        assert response.status_code == 500
+        assert "walk blew up" in response.json()["detail"]
+
+    def test_400_on_empty_path(self, client, monkeypatch):
+        _patch_idea_dependencies(path=[], monkeypatch=monkeypatch)
+        try:
+            response = client.post("/idea", json={"query": "x"})
+        finally:
+            app.dependency_overrides.clear()
+        assert response.status_code == 400
+        assert "no path" in response.json()["detail"]
+
+    def test_502_on_llm_error(self, client, monkeypatch):
+        from rhizome.gateway import GatewayError
+        _patch_idea_dependencies(
+            path=[make_traversal_step()],
+            llm_raises=GatewayError("502 Bad Gateway: upstream down"),
+            monkeypatch=monkeypatch,
+        )
+        try:
+            response = client.post("/idea", json={"query": "x"})
+        finally:
+            app.dependency_overrides.clear()
+        assert response.status_code == 502
+        assert "LLM call failed" in response.json()["detail"]
+
+
+class TestIdeaValidation:
+    def test_422_on_missing_query(self, client):
+        app.dependency_overrides[get_embedder_dep] = lambda: FakeEmbedder()
+        app.dependency_overrides[get_vector_store_dep] = lambda: FakeVectorStore(
+            collection_exists=True
+        )
+        app.dependency_overrides[get_config_dep] = lambda: make_config(
+            llm_gateway_url="http://fake-gateway:30128"
+        )
+        app.dependency_overrides[_get_llm_dep] = lambda: FakeLLM()
+        try:
+            response = client.post("/idea", json={})
+        finally:
+            app.dependency_overrides.clear()
+        assert response.status_code == 422
+
+    def test_422_on_epsilon_out_of_range(self, client):
+        app.dependency_overrides[get_embedder_dep] = lambda: FakeEmbedder()
+        app.dependency_overrides[get_vector_store_dep] = lambda: FakeVectorStore(
+            collection_exists=True
+        )
+        app.dependency_overrides[get_config_dep] = lambda: make_config(
+            llm_gateway_url="http://fake-gateway:30128"
+        )
+        app.dependency_overrides[_get_llm_dep] = lambda: FakeLLM()
+        try:
+            response = client.post("/idea", json={"query": "x", "epsilon": 5.0})
+        finally:
+            app.dependency_overrides.clear()
+        assert response.status_code == 422
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# /idea/stream — SSE walk + thesis
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestIdeaStreamHappyPath:
+    def test_emits_step_thesis_done_in_order(self, client, monkeypatch):
+        steps = [
+            make_traversal_step(chunk_id=f"c-{i}", article_title=f"Article {i}")
+            for i in range(3)
+        ]
+        _patch_idea_dependencies(
+            path=steps,
+            llm_text="A streamed thesis body.",
+            monkeypatch=monkeypatch,
+            also_patch_api_engine=True,
+        )
+        try:
+            with client.stream(
+                "POST", "/idea/stream", json={"query": "x", "depth": 3}
+            ) as response:
+                assert response.status_code == 200
+                events = self._read_sse_events(response)
+        finally:
+            app.dependency_overrides.clear()
+
+        types = [e["type"] for e in events]
+        assert types == ["step", "step", "step", "thesis", "done"], types
+        assert events[3]["thesis"] == "A streamed thesis body."
+        assert events[4]["stats"]["articles"] == 3
+        assert events[4]["stats"]["forced_jumps"] == 0
+
+    def test_empty_path_emits_error(self, client, monkeypatch):
+        _patch_idea_dependencies(
+            path=[],
+            monkeypatch=monkeypatch,
+            also_patch_api_engine=True,
+        )
+        try:
+            with client.stream("POST", "/idea/stream", json={"query": "x"}) as response:
+                events = self._read_sse_events(response)
+        finally:
+            app.dependency_overrides.clear()
+        types = [e["type"] for e in events]
+        assert types == ["error"]
+        assert "no path" in events[0]["detail"]
+
+    def test_llm_error_emits_error_event(self, client, monkeypatch):
+        from rhizome.gateway import GatewayError
+        _patch_idea_dependencies(
+            path=[make_traversal_step()],
+            llm_raises=GatewayError("upstream timeout"),
+            monkeypatch=monkeypatch,
+            also_patch_api_engine=True,
+        )
+        try:
+            with client.stream("POST", "/idea/stream", json={"query": "x"}) as response:
+                events = self._read_sse_events(response)
+        finally:
+            app.dependency_overrides.clear()
+        types = [e["type"] for e in events]
+        assert types == ["step", "error"]
+        assert "LLM call failed" in events[1]["detail"]
+
+    @staticmethod
+    def _read_sse_events(response):
+        import json as _json
+        out = []
+        for raw in response.iter_lines():
+            if not raw or not raw.startswith("data: "):
+                continue
+            out.append(_json.loads(raw[6:]))
+        return out
