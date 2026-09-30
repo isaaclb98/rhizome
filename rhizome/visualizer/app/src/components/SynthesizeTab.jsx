@@ -241,13 +241,13 @@ export default function SynthesizeTab({ params, setParams }) {
         {/* Thesis panel */}
         <div className="flex-1 min-h-0 overflow-y-auto px-6 py-6 bg-bg-primary">
           {thesis.content ? (
-            <article className="markdown-body max-w-none text-text-primary">
+            <article className="markdown-body max-w-xl mx-auto text-text-primary leading-relaxed">
               {thesis.main_thesis ? (
                 <header className="mb-6 pb-5 border-b border-border">
                   <div className="text-xs uppercase tracking-wider text-text-muted mb-2">
                     Thesis
                   </div>
-                  <p className="text-lg font-semibold leading-snug text-text-primary">
+                  <p className="text-xl font-semibold leading-snug text-text-primary">
                     {thesis.main_thesis}
                   </p>
                 </header>
@@ -255,11 +255,11 @@ export default function SynthesizeTab({ params, setParams }) {
               <Markdown>{thesis.content}</Markdown>
             </article>
           ) : isLoading ? (
-            <div className="text-text-muted text-sm">
+            <div className="max-w-xl mx-auto text-text-muted text-sm">
               Synthesizing…
             </div>
           ) : (
-            <div className="text-text-muted text-sm">
+            <div className="max-w-xl mx-auto text-text-muted text-sm">
               Type a seed and hit Synthesize — the walk reads through the corpus, collects fragments, and the LLM forges a thesis from them.
             </div>
           )}
