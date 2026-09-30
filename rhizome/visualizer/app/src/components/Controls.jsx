@@ -56,6 +56,7 @@ export default function Controls({ params, onTraverse, isLoading }) {
           onChange={(e) => setDepth(Number(e.target.value))}
           className={inputClass}
           disabled={isLoading}
+          title="How many steps the walk takes from the starting concept. Each step picks the next chunk from the corpus based on similarity. Default 10."
         />
       </div>
 
@@ -74,6 +75,7 @@ export default function Controls({ params, onTraverse, isLoading }) {
           onChange={(e) => setEpsilon(Number(e.target.value))}
           className={inputClass}
           disabled={isLoading}
+          title="Exploration probability. 0 = always pick the most-similar chunk (greedy). 1 = always pick at random. 0.1 is a small nudge toward surprise."
         />
       </div>
 
@@ -91,6 +93,7 @@ export default function Controls({ params, onTraverse, isLoading }) {
           onChange={(e) => setTopK(Number(e.target.value))}
           className={inputClass}
           disabled={isLoading}
+          title="How many candidates Qdrant returns per step. The walker picks one from these. Larger = more options but slower."
         />
       </div>
 
@@ -109,6 +112,7 @@ export default function Controls({ params, onTraverse, isLoading }) {
           onChange={(e) => setTemperature(Number(e.target.value))}
           className={inputClass}
           disabled={isLoading}
+          title="Softness of the pick. 0 = always the most-similar non-blocked candidate. Higher = more likely to pick a less-similar one. Affects randomness independently of epsilon."
         />
       </div>
 
@@ -126,6 +130,7 @@ export default function Controls({ params, onTraverse, isLoading }) {
           onChange={(e) => setMaxSameArticle(Number(e.target.value))}
           className={inputClass}
           disabled={isLoading}
+          title="How many consecutive steps can come from the same Wikipedia article. After this many, the walker is forced to jump to a different article. 0 disables the rule."
         />
       </div>
 

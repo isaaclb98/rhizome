@@ -168,6 +168,7 @@ export default function SynthesizeTab({ params, setParams }) {
               onChange={(e) => updateParam('depth', Number(e.target.value))}
               className={inputClass}
               disabled={isLoading}
+              title="How many steps the walk takes from the seed. Each step picks the next chunk from the corpus based on similarity. Default 10."
             />
           </div>
           <div className="w-20">
@@ -178,6 +179,7 @@ export default function SynthesizeTab({ params, setParams }) {
               onChange={(e) => updateParam('epsilon', Number(e.target.value))}
               className={inputClass}
               disabled={isLoading}
+              title="Exploration probability. 0 = always pick the most-similar chunk (greedy). 1 = always pick at random. 0.1 is a small nudge toward surprise."
             />
           </div>
           <div className="w-20">
@@ -188,6 +190,7 @@ export default function SynthesizeTab({ params, setParams }) {
               onChange={(e) => updateParam('temperature', Number(e.target.value))}
               className={inputClass}
               disabled={isLoading}
+              title="Softness of the pick. 0 = always the most-similar non-blocked candidate. Higher = more likely to pick a less-similar one. Affects randomness independently of epsilon."
             />
           </div>
           <div className="w-24">
@@ -198,6 +201,7 @@ export default function SynthesizeTab({ params, setParams }) {
               onChange={(e) => updateParam('max_same_article_consecutive', Number(e.target.value))}
               className={inputClass}
               disabled={isLoading}
+              title="How many consecutive steps can come from the same Wikipedia article. After this many, the walker is forced to jump to a different article. 0 disables the rule."
             />
           </div>
 
