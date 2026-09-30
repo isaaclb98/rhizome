@@ -509,26 +509,22 @@ def _require_gateway(config: RhizomeConfig) -> str:
     return config.llm_gateway_url
 
 
-def _get_llm_dep(
-    config: RhizomeConfig = Depends(get_config_dep),
+def _resolve_llm(
+    config: RhizomeConfig,
+    override_model: str | None = None,
 ) -> GatewayLLM:
-    """Build a GatewayLLM from config.
+    """Build a GatewayLLM from config, optionally overriding the model.
 
-    Endpoints that want to honor a per-request ``llm_model`` override must
-    call ``_build_llm(config, override)`` directly instead of using this
-    dependency, since deps resolve before the request body is parsed.
+    Not a FastAPI dependency. ``/idea`` calls this directly inside the
+    handler so that ``llm_model`` from the request body can be honored.
+
+    Tests monkeypatch this with ``monkeypatch.setattr(api_main, "_resolve_llm",
+    lambda cfg, override=None: fake_llm)`` to inject a stub LLM.
     """
+    model = override_model or config.llm_model
     return GatewayLLM(
         base_url=_require_gateway(config),
-        model=config.llm_model,
-        api_key=config.llm_gateway_api_key,
-    )
-
-
-def _build_llm(config: RhizomeConfig, model_override: str | None) -> GatewayLLM:
-    return GatewayLLM(
-        base_url=_require_gateway(config),
-        model=model_override or config.llm_model,
+        model=model,
         api_key=config.llm_gateway_api_key,
     )
 
@@ -539,16 +535,20 @@ def idea(
     embedder: Embedder = Depends(get_embedder_dep),
     vector_store: VectorStoreClient = Depends(get_vector_store_dep),
     config: RhizomeConfig = Depends(get_config_dep),
-    llm: GatewayLLM = Depends(_get_llm_dep),
 ):
     """Run a traversal and synthesize a thesis from its material.
 
     Mirrors the ``rhizome idea`` CLI command but runs in-process inside the
     API container, so the visualizer's Synthesize tab can stream progress
     and final text over SSE without spawning a subprocess.
+
+    The LLM is built inline via ``_resolve_llm`` (not a FastAPI dependency)
+    so the per-request ``llm_model`` override is honored.
     """
     _require_collection(vector_store, config.qdrant_collection)
     _require_gateway(config)
+
+    llm = _resolve_llm(config, req.llm_model)
 
     seed = req.seed or req.query
     traversal_config = TraversalConfig(
@@ -579,11 +579,8 @@ def idea(
             detail="Walk produced no path.",
         )
 
-    # Honor per-request llm_model override if supplied; otherwise the
-    # dependency-injected llm (built from config) is used.
-    active_llm = _build_llm(config, req.llm_model) if req.llm_model else llm
     try:
-        thesis = synthesize_thesis(seed, path, active_llm, req.llm_temperature)
+        thesis = synthesize_thesis(seed, path, llm, req.llm_temperature)
     except GatewayError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -602,7 +599,7 @@ def idea(
             max_same_article_consecutive=stats["max_same_article_consecutive"],
             forced_jumps=stats["forced_jumps"],
             articles=stats["articles"],
-            model=active_llm.model,
+            model=llm.model,
         ),
     )
 
@@ -613,7 +610,6 @@ async def idea_stream(
     embedder: Embedder = Depends(get_embedder_dep),
     vector_store: VectorStoreClient = Depends(get_vector_store_dep),
     config: RhizomeConfig = Depends(get_config_dep),
-    llm: GatewayLLM = Depends(_get_llm_dep),
 ):
     """Stream traversal steps as SSE events, then emit a final thesis event.
 
@@ -636,6 +632,8 @@ async def idea_stream(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Qdrant unavailable",
         )
+
+    llm = _resolve_llm(config, req.llm_model)
 
     seed = req.seed or req.query
     traversal_config = TraversalConfig(

@@ -25,7 +25,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from rhizome.api.main import (
-    _get_llm_dep,
     app,
     get_config_dep,
     get_embedder_dep,
@@ -655,6 +654,10 @@ def _patch_idea_dependencies(
                 "rhizome.api.main.TraversalEngine",
                 lambda embedder, vector_store, config: fake_engine,
             )
+        monkeypatch.setattr(
+            "rhizome.api.main._resolve_llm",
+            lambda config, override_model=None: _apply_model_override(fake_llm, override_model),
+        )
 
     app.dependency_overrides[get_embedder_dep] = lambda: embedder or FakeEmbedder()
     app.dependency_overrides[get_vector_store_dep] = lambda: vector_store or FakeVectorStore(
@@ -663,8 +666,14 @@ def _patch_idea_dependencies(
     app.dependency_overrides[get_config_dep] = lambda: config or make_config(
         llm_gateway_url="http://fake-gateway:30128"
     )
-    app.dependency_overrides[_get_llm_dep] = lambda: fake_llm
     return fake_engine, fake_llm
+
+
+def _apply_model_override(fake_llm, override_model):
+    """Mirror production behavior: honor a per-request model override."""
+    if override_model:
+        fake_llm.model = override_model
+    return fake_llm
 
 
 class TestIdeaHappyPath:
@@ -712,13 +721,8 @@ class TestIdeaHappyPath:
         _, llm = _patch_idea_dependencies(
             path=[make_traversal_step()], monkeypatch=monkeypatch
         )
-        # When req.llm_model is set, the endpoint constructs a fresh GatewayLLM
-        # via _build_llm. Patch _build_llm to return our fake with the requested
-        # model so we can verify the override takes effect end-to-end.
-        def fake_build_llm(config, model_override):
-            llm.model = model_override or llm.model
-            return llm
-        monkeypatch.setattr("rhizome.api.main._build_llm", fake_build_llm)
+        # _patch_idea_dependencies patches _resolve_llm to honor the per-request
+        # model override, mirroring production.
         try:
             client.post("/idea", json={"query": "x", "llm_model": "isaac-quality"})
         finally:
@@ -809,7 +813,6 @@ class TestIdeaValidation:
         app.dependency_overrides[get_config_dep] = lambda: make_config(
             llm_gateway_url="http://fake-gateway:30128"
         )
-        app.dependency_overrides[_get_llm_dep] = lambda: FakeLLM()
         try:
             response = client.post("/idea", json={})
         finally:
@@ -824,7 +827,6 @@ class TestIdeaValidation:
         app.dependency_overrides[get_config_dep] = lambda: make_config(
             llm_gateway_url="http://fake-gateway:30128"
         )
-        app.dependency_overrides[_get_llm_dep] = lambda: FakeLLM()
         try:
             response = client.post("/idea", json={"query": "x", "epsilon": 5.0})
         finally:
@@ -904,7 +906,9 @@ class TestIdeaStreamHappyPath:
             if not raw or not raw.startswith("data: "):
                 continue
             out.append(_json.loads(raw[6:]))
-        return out# ─────────────────────────────────────────────────────────────────────────────
+        return out
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Route ordering invariant
 #
 # A StaticFiles mount at "/" registered mid-module shadows every API route
