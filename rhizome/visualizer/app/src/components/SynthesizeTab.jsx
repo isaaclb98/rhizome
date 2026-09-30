@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import Markdown from 'react-markdown';
 
 export default function SynthesizeTab({ params, setParams }) {
   const [thesis, setThesis] = useState('');
@@ -217,8 +218,8 @@ export default function SynthesizeTab({ params, setParams }) {
         {/* Thesis panel */}
         <div className="flex-1 min-h-0 overflow-y-auto px-6 py-6 bg-bg-primary">
           {thesis ? (
-            <article className="prose prose-invert max-w-none whitespace-pre-wrap text-text-primary leading-relaxed">
-              {thesis}
+            <article className="markdown-body max-w-none text-text-primary">
+              <Markdown>{thesis}</Markdown>
             </article>
           ) : isLoading ? (
             <div className="text-text-muted text-sm">
