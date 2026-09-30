@@ -134,7 +134,7 @@ export default function SynthesizeTab({ params, setParams }) {
     <>
       {/* Header */}
       <header className="flex-none bg-bg-secondary border-b border-border px-4 py-3">
-        <div className="flex items-center gap-3 mb-3">
+        <div className="flex items-baseline gap-3 mb-1">
           <h2 className="text-lg font-semibold tracking-tight text-text-primary">
             Synthesize
           </h2>
@@ -142,92 +142,117 @@ export default function SynthesizeTab({ params, setParams }) {
             Walk the corpus, then forge a thesis from the material
           </span>
         </div>
-
-        {/* Inline form */}
-        <form
-          onSubmit={(e) => { e.preventDefault(); handleSynthesize(); }}
-          className="flex items-end gap-4 flex-wrap"
-        >
-          <div className="flex-1 min-w-64">
-            <label className={labelClass} htmlFor="seed">Seed</label>
-            <input
-              id="seed"
-              type="text"
-              value={localParams.query}
-              onChange={(e) => updateParam('query', e.target.value)}
-              placeholder="e.g. the tension between structure and event"
-              className={inputClass}
-              disabled={isLoading}
-            />
-          </div>
-          <div className="w-20">
-            <label className={labelClass} htmlFor="depth">Depth</label>
-            <input
-              id="depth" type="number" min="1" max="50"
-              value={localParams.depth}
-              onChange={(e) => updateParam('depth', Number(e.target.value))}
-              className={inputClass}
-              disabled={isLoading}
-              title="How many steps the walk takes from the seed. Each step picks the next chunk from the corpus based on similarity. Default 10."
-            />
-          </div>
-          <div className="w-20">
-            <label className={labelClass} htmlFor="epsilon">ε</label>
-            <input
-              id="epsilon" type="number" min="0" max="1" step="0.05"
-              value={localParams.epsilon}
-              onChange={(e) => updateParam('epsilon', Number(e.target.value))}
-              className={inputClass}
-              disabled={isLoading}
-              title="Exploration probability. 0 = always pick the most-similar chunk (greedy). 1 = always pick at random. 0.1 is a small nudge toward surprise."
-            />
-          </div>
-          <div className="w-20">
-            <label className={labelClass} htmlFor="temp">temp</label>
-            <input
-              id="temp" type="number" min="0" max="3" step="0.1"
-              value={localParams.temperature}
-              onChange={(e) => updateParam('temperature', Number(e.target.value))}
-              className={inputClass}
-              disabled={isLoading}
-              title="Softness of the pick. 0 = always the most-similar non-blocked candidate. Higher = more likely to pick a less-similar one. Affects randomness independently of epsilon."
-            />
-          </div>
-          <div className="w-24">
-            <label className={labelClass} htmlFor="same-art">same-art</label>
-            <input
-              id="same-art" type="number" min="0" max="10"
-              value={localParams.max_same_article_consecutive}
-              onChange={(e) => updateParam('max_same_article_consecutive', Number(e.target.value))}
-              className={inputClass}
-              disabled={isLoading}
-              title="How many consecutive steps can come from the same Wikipedia article. After this many, the walker is forced to jump to a different article. 0 disables the rule."
-            />
-          </div>
-
-          <label
-            className="inline-flex items-center gap-2 pb-2.5 text-sm text-text-secondary cursor-pointer select-none"
-            title="When on, the seed text is included in the LLM prompt as a synthesis lens. Off: the model only sees the fragments."
-          >
-            <input
-              type="checkbox"
-              checked={localParams.inject_seed}
-              onChange={(e) => updateParam('inject_seed', e.target.checked)}
-              disabled={isLoading}
-              className="h-4 w-4 rounded border-border bg-bg-secondary text-accent focus:ring-2 focus:ring-accent cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-            />
-            Include seed in prompt
-          </label>
-
-          <button
-            type="submit"
-            disabled={isLoading || !localParams.query.trim()}
-            className="px-4 py-2 text-sm bg-accent text-white rounded hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-          >
-            {isLoading ? 'Synthesizing…' : 'Synthesize'}
-          </button>
-        </form>
       </header>
+
+      {/* Carded form */}
+      <div className="flex-none px-4 pt-4">
+        <section className="bg-bg-secondary border border-border rounded-lg p-4">
+          <header className="mb-3">
+            <h3 className="text-sm font-semibold tracking-tight text-text-primary">
+              Compose a synthesis
+            </h3>
+            <p className="text-xs text-text-muted mt-0.5">
+              Pick a seed and the LLM will read the walk and forge a thesis from it.
+            </p>
+          </header>
+
+          <form
+            onSubmit={(e) => { e.preventDefault(); handleSynthesize(); }}
+            className="space-y-3"
+          >
+            {/* Seed row */}
+            <div>
+              <label className={labelClass} htmlFor="seed">Seed</label>
+              <input
+                id="seed"
+                type="text"
+                value={localParams.query}
+                onChange={(e) => updateParam('query', e.target.value)}
+                placeholder="e.g. the tension between structure and event"
+                className={inputClass}
+                disabled={isLoading}
+              />
+            </div>
+
+            {/* Dials row */}
+            <div className="flex flex-wrap gap-3">
+              <div className="w-24">
+                <label className={labelClass} htmlFor="depth">Depth</label>
+                <input
+                  id="depth" type="number" min="1" max="50"
+                  value={localParams.depth}
+                  onChange={(e) => updateParam('depth', Number(e.target.value))}
+                  className={inputClass}
+                  disabled={isLoading}
+                  title="How many steps the walk takes from the seed. Each step picks the next chunk from the corpus based on similarity. Default 10."
+                />
+                <p className="text-[11px] text-text-muted mt-0.5">walk length</p>
+              </div>
+              <div className="w-24">
+                <label className={labelClass} htmlFor="epsilon">ε</label>
+                <input
+                  id="epsilon" type="number" min="0" max="1" step="0.05"
+                  value={localParams.epsilon}
+                  onChange={(e) => updateParam('epsilon', Number(e.target.value))}
+                  className={inputClass}
+                  disabled={isLoading}
+                  title="Exploration probability. 0 = always pick the most-similar chunk (greedy). 1 = always pick at random. 0.1 is a small nudge toward surprise."
+                />
+                <p className="text-[11px] text-text-muted mt-0.5">explore</p>
+              </div>
+              <div className="w-24">
+                <label className={labelClass} htmlFor="temp">temp</label>
+                <input
+                  id="temp" type="number" min="0" max="3" step="0.1"
+                  value={localParams.temperature}
+                  onChange={(e) => updateParam('temperature', Number(e.target.value))}
+                  className={inputClass}
+                  disabled={isLoading}
+                  title="Softness of the pick. 0 = always the most-similar non-blocked candidate. Higher = more likely to pick a less-similar one. Affects randomness independently of epsilon."
+                />
+                <p className="text-[11px] text-text-muted mt-0.5">pick softness</p>
+              </div>
+              <div className="w-28">
+                <label className={labelClass} htmlFor="same-art">same-art</label>
+                <input
+                  id="same-art" type="number" min="0" max="10"
+                  value={localParams.max_same_article_consecutive}
+                  onChange={(e) => updateParam('max_same_article_consecutive', Number(e.target.value))}
+                  className={inputClass}
+                  disabled={isLoading}
+                  title="How many consecutive steps can come from the same Wikipedia article. After this many, the walker is forced to jump to a different article. 0 disables the rule."
+                />
+                <p className="text-[11px] text-text-muted mt-0.5">stay limit</p>
+              </div>
+            </div>
+
+            {/* Submit row */}
+            <div className="flex items-center justify-between gap-3 pt-1">
+              <label
+                className="inline-flex items-center gap-2 text-sm text-text-secondary cursor-pointer select-none"
+                title="When on, the seed text is included in the LLM prompt as a synthesis lens. Off: the model only sees the fragments."
+              >
+                <input
+                  type="checkbox"
+                  checked={localParams.inject_seed}
+                  onChange={(e) => updateParam('inject_seed', e.target.checked)}
+                  disabled={isLoading}
+                  className="h-4 w-4 rounded border-border bg-bg-primary text-accent focus:ring-2 focus:ring-accent cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                />
+                Include seed in prompt
+              </label>
+
+              <button
+                type="submit"
+                disabled={isLoading || !localParams.query.trim()}
+                className="px-5 py-2 bg-accent hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium rounded transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary"
+              >
+                {isLoading ? 'Synthesizing…' : 'Synthesize'}
+              </button>
+            </div>
+          </form>
+        </section>
+      </div>
 
       {/* Error banner */}
       {error && (
