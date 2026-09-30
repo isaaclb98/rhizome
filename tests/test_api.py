@@ -904,4 +904,72 @@ class TestIdeaStreamHappyPath:
             if not raw or not raw.startswith("data: "):
                 continue
             out.append(_json.loads(raw[6:]))
-        return out
+        return out# ─────────────────────────────────────────────────────────────────────────────
+# Route ordering invariant
+#
+# A StaticFiles mount at "/" registered mid-module shadows every API route
+# declared after it: the mount matches any path, and StaticFiles answers a
+# non-GET with {"detail": "Method Not Allowed"} — which is indistinguishable
+# from a real routing miss. POST /idea silently 405'd this way while /traverse
+# (declared earlier) kept working. Keep static mounts last and scoped.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestRouteOrdering:
+    def test_no_mount_shadows_a_later_api_route(self):
+        """A mount must not be able to swallow a route declared after it.
+
+        The SPA fallback is deliberately last and is the one exception: nothing
+        after it exists, so it cannot be shadowed.
+        """
+        from starlette.routing import Mount
+        from fastapi.routing import APIRoute
+
+        routes = app.routes
+        for i, m in enumerate(routes):
+            if not isinstance(m, Mount):
+                continue
+            prefix = m.path
+            for later in routes[i + 1:]:
+                if not isinstance(later, APIRoute):
+                    continue
+                if later.path == prefix or later.path.startswith(prefix.rstrip("/") + "/"):
+                    raise AssertionError(
+                        f"Mount {prefix!r} shadows APIRoute {later.path!r} "
+                        "declared after it — move the mount last or narrow its prefix"
+                    )
+
+    def test_static_mount_is_scoped_to_assets(self):
+        from starlette.routing import Mount
+
+        mounts = [r for r in app.routes if isinstance(r, Mount)]
+        for m in mounts:
+            assert m.path == "/assets", (
+                f"static mount must be scoped to /assets, got {m.path!r}; "
+                "a catch-all mount shadows API routes"
+            )
+
+    def test_idea_routes_reach_their_handlers_not_static(self, client, monkeypatch):
+        """POST /idea must not be answered with StaticFiles' 405."""
+        _patch_idea_dependencies(
+            path=[make_traversal_step()], monkeypatch=monkeypatch
+        )
+        try:
+            response = client.post("/idea", json={"query": "x"})
+        finally:
+            app.dependency_overrides.clear()
+        assert response.status_code != 405
+        assert response.status_code == 200
+
+    def test_all_api_routes_precede_the_spa_fallback(self):
+        """The catch-all GET must be the final route so API paths always win."""
+        paths = [getattr(r, "path", None) for r in app.routes]
+        if "/{path:path}" not in paths:
+            return
+        fallback_idx = paths.index("/{path:path}")
+        for r in app.routes[fallback_idx + 1:]:
+            if not isinstance(r, Mount):
+                raise AssertionError(
+                    f"route {getattr(r, 'path', r)!r} is declared after the SPA "
+                    "catch-all and will never match"
+                )

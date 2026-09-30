@@ -454,14 +454,6 @@ async def traverse_stream(
     )
 
 
-# ── Static files + SPA fallback ───────────────────────────────────────────────
-
-if STATIC_DIR.exists():
-    from fastapi.staticfiles import StaticFiles
-
-    app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
-
-
 def _path_to_response(path) -> list[TraversalStepResponse]:
     """Convert an internal path (list of TraversalStep) into API response items."""
     return [
@@ -702,9 +694,25 @@ async def idea_stream(
     )
 
 
-@app.get("/{path:path}")
-async def spa_fallback(path: str):
-    """Serve index.html for any non-API route to support client-side routing."""
+# ── Static frontend ──────────────────────────────────────────────────────────
+#
+# The asset mount is registered last and scoped to `/assets` (the only path the
+# Vite build emits). A catch-all mount at `/` would shadow every API route
+# declared after it, so never widen this prefix.
+
+if (STATIC_DIR / "assets").is_dir():
+    from fastapi.staticfiles import StaticFiles
+
+    app.mount(
+        "/assets",
+        StaticFiles(directory=str(STATIC_DIR / "assets"), html=False),
+        name="static-assets",
+    )
+
+
+@app.get("/{path:path}", include_in_schema=False)
+async def spa_fallback(path: str = ""):
+    """Serve index.html for any non-API GET route to support client-side routing."""
     index = STATIC_DIR / "index.html"
     if not index.exists():
         raise HTTPException(
