@@ -61,6 +61,24 @@ export default function Controls({ params, onTraverse, isLoading }) {
         />
       </div>
 
+      {/* Same Article Limit */}
+      <div className="w-28">
+        <label className={labelClass} htmlFor="maxSameArticle">
+          Same Art. <span className="text-text-muted">(0-10)</span>
+        </label>
+        <input
+          id="maxSameArticle"
+          type="number"
+          min={0}
+          max={10}
+          value={maxSameArticle}
+          onChange={(e) => setMaxSameArticle(Number(e.target.value))}
+          className={inputClass}
+          disabled={isLoading}
+          title="Force a new article after this many consecutive steps. 0 disables the rule. Default 2."
+        />
+      </div>
+
       {/* Exploration slider */}
       <div className="w-44">
         <div className="flex items-baseline justify-between mb-1">
@@ -79,24 +97,6 @@ export default function Controls({ params, onTraverse, isLoading }) {
           ariaLabel="Exploration"
         />
         <p className="text-[11px] text-text-muted mt-0.5">stay on topic ↔ wander</p>
-      </div>
-
-      {/* Same Article Limit */}
-      <div className="w-28">
-        <label className={labelClass} htmlFor="maxSameArticle">
-          Same Art. <span className="text-text-muted">(0-10)</span>
-        </label>
-        <input
-          id="maxSameArticle"
-          type="number"
-          min={0}
-          max={10}
-          value={maxSameArticle}
-          onChange={(e) => setMaxSameArticle(Number(e.target.value))}
-          className={inputClass}
-          disabled={isLoading}
-          title="Force a new article after this many consecutive steps. 0 disables the rule. Default 2."
-        />
       </div>
 
       {/* Submit */}

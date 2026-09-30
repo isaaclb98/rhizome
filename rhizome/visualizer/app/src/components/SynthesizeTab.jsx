@@ -172,6 +172,17 @@ export default function SynthesizeTab({ params, setParams }) {
               title="How many steps the walk takes. Each step reads one chunk of Wikipedia. Default 10."
             />
           </div>
+          <div className="w-24">
+            <label className={labelClass} htmlFor="same-art">Same art.</label>
+            <input
+              id="same-art" type="number" min="0" max="10"
+              value={localParams.max_same_article_consecutive}
+              onChange={(e) => updateParam('max_same_article_consecutive', Number(e.target.value))}
+              className={inputClass}
+              disabled={isLoading}
+              title="Force a new article after this many consecutive steps. 0 disables the rule. Default 2."
+            />
+          </div>
           <div className="w-44">
             <div className="flex items-baseline justify-between mb-1">
               <label className={labelClass}>Exploration</label>
@@ -189,17 +200,6 @@ export default function SynthesizeTab({ params, setParams }) {
               ariaLabel="Exploration"
             />
             <p className="text-[11px] text-text-muted mt-0.5">stay on topic ↔ wander</p>
-          </div>
-          <div className="w-24">
-            <label className={labelClass} htmlFor="same-art">Same art.</label>
-            <input
-              id="same-art" type="number" min="0" max="10"
-              value={localParams.max_same_article_consecutive}
-              onChange={(e) => updateParam('max_same_article_consecutive', Number(e.target.value))}
-              className={inputClass}
-              disabled={isLoading}
-              title="Force a new article after this many consecutive steps. 0 disables the rule. Default 2."
-            />
           </div>
 
           <label
